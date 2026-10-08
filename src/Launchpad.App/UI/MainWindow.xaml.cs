@@ -30,6 +30,7 @@ public partial class MainWindow : Window
     private int _cols = 1, _rows = 1;
     private bool _mouseDown, _dragging;
     private bool _suppressTileClick;
+    private bool _dismissGroupClick;
     private Point _dragStart;
     private int _focusedSearchItem = -1;
 
@@ -502,7 +503,12 @@ public partial class MainWindow : Window
         if (SearchBox.Text.Length > 0) SearchBox.Focus();
         if (_openGroup != null)
         {
-            if (!IsInside(e.OriginalSource as DependencyObject, GroupHost)) { ExitGroup(); e.Handled = true; return; }   // click outside closes it
+            if (!IsInside(e.OriginalSource as DependencyObject, GroupHost))
+            {
+                _dismissGroupClick = true;
+                e.Handled = true;
+                return;
+            }
             _cx = _panel;
             RefreshPanelOrigin();
         }
@@ -576,6 +582,14 @@ public partial class MainWindow : Window
 
     private void OnPagerMouseUp(object sender, MouseButtonEventArgs e)
     {
+        if (_dismissGroupClick)
+        {
+            _dismissGroupClick = false;
+            ExitGroup();
+            e.Handled = true;
+            return;
+        }
+
         bool wasDragging = _dragging, wasReordering = _reordering;
         _pressed = _mouseDown = _dragging = false;
         CancelHold();
@@ -607,6 +621,16 @@ public partial class MainWindow : Window
     {
         if (SettingsOverlay.Visibility == Visibility.Visible) return;
         var src = e.OriginalSource as DependencyObject;
+        if (_openGroup != null)
+        {
+            if (IsInside(src, GroupHost)) return;
+            if (!IsInside(src, HomeLayer))
+            {
+                ExitGroup();
+                e.Handled = true;
+            }
+            return;
+        }
         if (IsInside(src, HomeLayer) || IsInside(src, SearchHost) || IsInside(src, SettingsButton)) return;
         HideLaunchpad();
     }
