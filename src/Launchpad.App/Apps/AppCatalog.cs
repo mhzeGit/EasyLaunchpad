@@ -18,7 +18,7 @@ namespace Launchpad.App.Apps;
 public sealed class AppCatalog
 {
     private const int IconVersion = 10;
-    private record CachedApp(string Id, string Name, string Target, bool Utility = false, bool Custom = false);
+    private record CachedApp(string Id, string Name, string Target, bool Utility = false, bool Custom = false, bool ShellApplication = false);
 
     private readonly string _listPath = Path.Combine(AppPaths.DataDir, "apps.json");
     private readonly string _iconDir = Path.Combine(AppPaths.DataDir, "icons");
@@ -43,10 +43,10 @@ public sealed class AppCatalog
             var cached = File.Exists(_listPath)
                 ? JsonSerializer.Deserialize<List<CachedApp>>(File.ReadAllText(_listPath)) ?? new()
                 : new List<CachedApp>();
-            var items = cached.Select(c => new AppItem(c.Id, c.Name, c.Target, c.Utility, c.Custom)).ToDictionary(i => i.Id);
+            var items = cached.Select(c => new AppItem(c.Id, c.Name, c.Target, c.Utility, c.Custom, c.ShellApplication)).ToDictionary(i => i.Id);
             if (customApps != null)
                 foreach (var entry in customApps)
-                    items[entry.Id] = new AppItem(entry.Id, entry.Name, entry.Path, isCustom: true);
+                    items[entry.Id] = new AppItem(entry.Id, entry.Name, entry.Path, isCustom: true, isShellApplication: entry.IsShellApplication);
             Parallel.ForEach(items.Values, item => item.Icon = LoadIcon(item.Id));
             foreach (var item in items.Values.Where(i => i.IsCustom && i.Icon == null)) item.Icon = LoadCustomIcon(item.Id, item.Target);
             return items.Values.Where(i => i.Icon != null).ToList();
@@ -75,6 +75,7 @@ public sealed class AppCatalog
     private List<AppItem> Refresh(IReadOnlyCollection<AppItem> existing, bool rebuildIcons)
     {
         var known = existing.ToDictionary(a => a.Id);
+        var pinnedIds = existing.Where(a => a.IsCustom).Select(a => a.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var result = new List<AppItem>();
 
         foreach (var (name, target) in EnumerateShell())
@@ -88,8 +89,10 @@ public sealed class AppCatalog
             icon ??= BuildIcon(id, target);
             if (icon == null) continue;                     // no icon, nothing sensible to show
 
-            bool utility = AppClassifier.IsUtility(name, target) || (Path.IsPathRooted(target) && Directory.Exists(target));   // a shortcut to a folder isn't an app
-            result.Add(new AppItem(id, name, target, utility) { Icon = icon });
+            bool pinned = pinnedIds.Contains(id);
+            bool shellApplication = pinned && known.TryGetValue(id, out var pinnedItem) && pinnedItem.IsShellApplication;
+            bool utility = !pinned && (AppClassifier.IsUtility(name, target) || (Path.IsPathRooted(target) && Directory.Exists(target)));   // explicitly pinned apps belong on the grid
+            result.Add(new AppItem(id, name, target, utility, isCustom: pinned, isShellApplication: shellApplication) { Icon = icon });
         }
 
         foreach (var item in existing.Where(a => a.IsCustom))
@@ -196,7 +199,7 @@ public sealed class AppCatalog
     {
         try
         {
-            string json = JsonSerializer.Serialize(items.Select(i => new CachedApp(i.Id, i.Name, i.Target, i.IsUtility, i.IsCustom)));
+            string json = JsonSerializer.Serialize(items.Select(i => new CachedApp(i.Id, i.Name, i.Target, i.IsUtility, i.IsCustom, i.IsShellApplication)));
             File.WriteAllText(_listPath, json);
         }
         catch (Exception) { }
@@ -208,7 +211,7 @@ public sealed class AppCatalog
     {
         try
         {
-            Process.Start(new ProcessStartInfo(app.IsCustom ? app.Target : @"shell:AppsFolder\" + app.Target) { UseShellExecute = true });
+            Process.Start(new ProcessStartInfo(app.IsShellApplication || !app.IsCustom ? @"shell:AppsFolder\" + app.Target : app.Target) { UseShellExecute = true });
             return true;
         }
         catch (Exception) { return false; }
@@ -239,4 +242,5 @@ public sealed class CustomAppEntry
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
     public string Path { get; set; } = "";
+    public bool IsShellApplication { get; set; }
 }

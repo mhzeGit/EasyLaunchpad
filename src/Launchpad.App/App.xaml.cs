@@ -75,6 +75,8 @@ public partial class App : Application
                 if (on) _ = _index.StartAsync();
                 else Task.Run(_index.Stop);
             },
+            AddItemRequested = AddItemFromPicker,
+            AddInstalledApplicationRequested = AddInstalledApplication,
         };
         _window.WarmUp();
 
@@ -119,14 +121,67 @@ public partial class App : Application
             Balloon($"Couldn't add '{Path.GetFileName(path)}' to Launchpad.");
             return;
         }
-        if (_settings.CustomApps.Any(a => string.Equals(a.Path, entry.Path, StringComparison.OrdinalIgnoreCase))) return;
-        _settings.CustomApps.Add(entry);
+        _settings.HiddenApps.RemoveAll(id => string.Equals(id, item.Id, StringComparison.OrdinalIgnoreCase));
+        if (!_settings.CustomApps.Any(a => string.Equals(a.Path, entry.Path, StringComparison.OrdinalIgnoreCase)))
+            _settings.CustomApps.Add(entry);
         _settings.Save();
         _apps.RemoveAll(a => a.Id == item.Id);
         _apps.Add(item);
         _window.SetApps(_apps);
         _ = RefreshAppsAsync(rebuildIcons: false);
         Balloon($"Added '{item.Name}' to Launchpad.");
+    }
+
+    private void AddItemFromPicker(string kind)
+    {
+        if (_window == null || _catalog == null) return;
+        if (kind == "application")
+        {
+            _window.ShowApplicationPicker();
+            return;
+        }
+        string? path = null;
+        try
+        {
+            if (kind == "file")
+            {
+                var dialog = new Microsoft.Win32.OpenFileDialog
+                {
+                    Title = "Add file to Launchpad",
+                    Filter = "All files (*.*)|*.*",
+                    CheckFileExists = true,
+                    Multiselect = false,
+                };
+                if (dialog.ShowDialog(_window) == true) path = dialog.FileName;
+            }
+            else if (kind == "folder")
+            {
+                using var dialog = new WinForms.FolderBrowserDialog { Description = "Choose a folder to add to Launchpad", UseDescriptionForTitle = true };
+                if (dialog.ShowDialog() == WinForms.DialogResult.OK) path = dialog.SelectedPath;
+            }
+        }
+        catch (Exception ex) { LogCrash(ex); }
+
+        if (path == null) return;
+        AddToLaunchpad(path);
+        _window.ShowLaunchpad();
+    }
+
+    private void AddInstalledApplication(AppItem app)
+    {
+        if (_window == null) return;
+        _settings.HiddenApps.RemoveAll(id => string.Equals(id, app.Id, StringComparison.OrdinalIgnoreCase));
+        var entry = _settings.CustomApps.FirstOrDefault(existing => string.Equals(existing.Id, app.Id, StringComparison.OrdinalIgnoreCase));
+        if (entry == null)
+        {
+            entry = new CustomAppEntry { Id = app.Id, Name = app.Name, Path = app.Target, IsShellApplication = app.IsShellApplication || !app.IsCustom };
+            _settings.CustomApps.Add(entry);
+        }
+        _settings.Save();
+        var pinned = new AppItem(app.Id, app.Name, app.Target, isCustom: true, isShellApplication: entry.IsShellApplication) { Icon = app.Icon };
+        _apps.RemoveAll(existing => existing.Id == app.Id);
+        _apps.Add(pinned);
+        _window.SetApps(_apps);
     }
 
     /// <summary>Developer aid: <c>Launchpad.exe --render-test out.png [--query=text] [--filter=Images] [--page=1] [--settings] [--size=1920x1080]</c></summary>

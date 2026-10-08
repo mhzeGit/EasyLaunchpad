@@ -4,9 +4,9 @@ namespace Launchpad.App.Apps;
 
 public sealed class AppItem
 {
-    public AppItem(string id, string name, string target, bool isUtility = false, bool isCustom = false)
+    public AppItem(string id, string name, string target, bool isUtility = false, bool isCustom = false, bool isShellApplication = false)
     {
-        Id = id; Name = name; Target = target; IsUtility = isUtility; IsCustom = isCustom;
+        Id = id; Name = name; Target = target; IsUtility = isUtility; IsCustom = isCustom; IsShellApplication = isShellApplication;
         NameLower = name.ToLowerInvariant();
         var sb = new System.Text.StringBuilder();
         bool boundary = true;
@@ -29,6 +29,9 @@ public sealed class AppItem
 
     /// <summary>A file, shortcut, or folder explicitly added by the user.</summary>
     public bool IsCustom { get; }
+
+    /// <summary>A pinned installed app launched by its shell:AppsFolder parsing name.</summary>
+    public bool IsShellApplication { get; }
 
     public ImageSource? Icon { get; set; }
 

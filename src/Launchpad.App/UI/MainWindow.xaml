@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="clr-namespace:Launchpad.App.UI"
-        Title="Launchpad" WindowStyle="None" ResizeMode="NoResize" ShowInTaskbar="False" Topmost="True"
+        Title="Launchpad" WindowStyle="None" ResizeMode="NoResize" ShowInTaskbar="False" Topmost="False"
         ShowActivated="True" Background="#FF0B0D14" AllowsTransparency="False"
         UseLayoutRounding="True" SnapsToDevicePixels="True"
         TextOptions.TextFormattingMode="Ideal" TextOptions.TextRenderingMode="Grayscale"
@@ -24,6 +24,28 @@
 
         <!-- extra darkening while a group window is open (covers the whole screen, not just the grid band) -->
         <Rectangle x:Name="WindowDim" Fill="#70000000" Opacity="0" IsHitTestVisible="False"/>
+
+        <!-- Installed application picker opened from the Add item submenu. -->
+        <Grid x:Name="ApplicationPicker" Visibility="Collapsed" Background="#70000000" Panel.ZIndex="20"
+              MouseDown="OnApplicationPickerBackdropMouseDown">
+            <Border Width="440" MaxHeight="560" CornerRadius="18" Padding="18" Background="#F2191C25"
+                    BorderBrush="#40FFFFFF" BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="Add an application" FontSize="18" FontWeight="SemiBold" Margin="2,0,0,14"/>
+                    <Border Grid.Row="1" Height="40" CornerRadius="12" Background="#30FFFFFF" BorderBrush="#35FFFFFF" BorderThickness="1" Padding="12,0">
+                        <TextBox x:Name="ApplicationPickerSearch" Background="Transparent" BorderThickness="0" Foreground="White"
+                                 CaretBrush="White" FontSize="14" VerticalContentAlignment="Center" TextChanged="OnApplicationPickerSearchChanged"
+                                 AutomationProperties.Name="Search installed applications"/>
+                    </Border>
+                    <ScrollViewer Grid.Row="2" Margin="0,12,0,0" MaxHeight="430" VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="ApplicationPickerResults"/>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+        </Grid>
 
         <Grid x:Name="Stage" RenderTransformOrigin="0.5,0.5">
             <Grid.RenderTransform>
@@ -124,24 +146,66 @@
             </Grid>
 
 
-            <!-- settings button -->
-            <Button x:Name="SettingsButton" Grid.Row="2" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,28,26"
-                    Width="34" Height="34" Click="OnSettingsClick" ToolTip="Settings" Content="&#xE713;"
-                    FontFamily="{StaticResource IconFont}" FontSize="15" Style="{StaticResource PillButton}" Panel.ZIndex="5">
-                <Button.Template>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bd" CornerRadius="17" Background="#1AFFFFFF">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#33FFFFFF"/>
-                                <Setter Property="Foreground" Value="White"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Button.Template>
-            </Button>
+            <!-- integrated account and launcher controls -->
+            <Border x:Name="Dock" Grid.Row="2" Height="54" Margin="0" Padding="18,0"
+                    VerticalAlignment="Bottom" Background="#B8171920"
+                    BorderBrush="#22FFFFFF" BorderThickness="0,1,0,0" Panel.ZIndex="4">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="AccountButton" Grid.Column="0" HorizontalAlignment="Left" VerticalAlignment="Center"
+                            Click="OnAccountClick" ToolTip="Account options" Background="Transparent" BorderThickness="0"
+                            Cursor="Hand" Padding="5,3" MinWidth="34" Height="44" Focusable="False">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border Width="34" Height="34" CornerRadius="17" Background="#FF374151" BorderBrush="#55FFFFFF" BorderThickness="1" ClipToBounds="True">
+                                <Grid>
+                                    <TextBlock x:Name="AccountInitial" Text="M" FontSize="14" FontWeight="SemiBold" Foreground="White"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <Ellipse x:Name="AccountPhoto" Visibility="Collapsed" StrokeThickness="0"/>
+                                </Grid>
+                            </Border>
+                            <TextBlock x:Name="AccountName" Text="Account" FontSize="13.5" FontWeight="Medium" Foreground="#F2FFFFFF" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="AccountBd" CornerRadius="10" Background="Transparent" Padding="7,4"><ContentPresenter/></Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="AccountBd" Property="Background" Value="#24FFFFFF"/></Trigger>
+                                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="AccountBd" Property="Background" Value="#38FFFFFF"/></Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button x:Name="DocumentsButton" Width="38" Height="38" Margin="2,0" Click="OnDocumentsClick" ToolTip="Documents"
+                                Content="&#xE8A5;" FontFamily="{StaticResource IconFont}" FontSize="16" Style="{StaticResource PillButton}">
+                            <Button.Template><ControlTemplate TargetType="Button"><Border x:Name="Bd" CornerRadius="10" Background="Transparent"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#29FFFFFF"/><Setter Property="Foreground" Value="White"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template>
+                        </Button>
+                        <Button x:Name="DownloadsButton" Width="38" Height="38" Margin="2,0" Click="OnDownloadsClick" ToolTip="Downloads"
+                                Content="&#xE896;" FontFamily="{StaticResource IconFont}" FontSize="16" Style="{StaticResource PillButton}">
+                            <Button.Template><ControlTemplate TargetType="Button"><Border x:Name="Bd" CornerRadius="10" Background="Transparent"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#29FFFFFF"/><Setter Property="Foreground" Value="White"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template>
+                        </Button>
+                        <Button x:Name="ExplorerButton" Width="38" Height="38" Margin="2,0" Click="OnExplorerClick" ToolTip="File Explorer"
+                                Content="&#xE8B7;" FontFamily="{StaticResource IconFont}" FontSize="16" Style="{StaticResource PillButton}">
+                            <Button.Template><ControlTemplate TargetType="Button"><Border x:Name="Bd" CornerRadius="10" Background="Transparent"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#29FFFFFF"/><Setter Property="Foreground" Value="White"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template>
+                        </Button>
+                        <Button x:Name="SettingsButton" Width="38" Height="38" Margin="2,0" Click="OnWindowsSettingsClick" ToolTip="Windows Settings"
+                                Content="&#xE713;" FontFamily="{StaticResource IconFont}" FontSize="15" Style="{StaticResource PillButton}">
+                            <Button.Template><ControlTemplate TargetType="Button"><Border x:Name="Bd" CornerRadius="10" Background="Transparent"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#29FFFFFF"/><Setter Property="Foreground" Value="White"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template>
+                        </Button>
+                        <Button x:Name="PowerButton" Width="38" Height="38" Margin="2,0,0,0" Click="OnPowerClick" ToolTip="Power options"
+                                Style="{StaticResource PillButton}">
+                            <Viewbox Width="16" Height="16"><Canvas Width="24" Height="24">
+                                <Path Data="M12,2 L12,12" Stroke="#D9FFFFFF" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                <Path Data="M7.05,4.93 A9,9 0 1 0 16.95,4.93" Stroke="#D9FFFFFF" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent"/>
+                            </Canvas></Viewbox>
+                            <Button.Template><ControlTemplate TargetType="Button"><Border x:Name="Bd" CornerRadius="10" Background="Transparent"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#29FFFFFF"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
         </Grid>
 
         <!-- settings overlay -->

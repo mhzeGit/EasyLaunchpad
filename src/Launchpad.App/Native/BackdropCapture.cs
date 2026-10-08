@@ -26,7 +26,10 @@ internal static class BackdropCapture
             dib = GdiCapture.CreateDIBSection(screen, ref bmi, 0, out IntPtr bits, IntPtr.Zero, 0);
             if (dib == IntPtr.Zero || bits == IntPtr.Zero) return null;
             old = GdiCapture.SelectObject(mem, dib);
-            if (!GdiCapture.BitBlt(mem, 0, 0, w, h, screen, monitor.Left, monitor.Top, GdiCapture.SRCCOPY | GdiCapture.CAPTUREBLT)) return null;
+            // Exclude layered overlays (toasts, game overlays and other HUDs) from the frozen backdrop.
+            // Including CAPTUREBLT can bake an overlay mid-animation into the image, making it appear
+            // duplicated or displaced when the launcher takes the foreground.
+            if (!GdiCapture.BitBlt(mem, 0, 0, w, h, screen, monitor.Left, monitor.Top, GdiCapture.SRCCOPY)) return null;
 
             int f = Math.Max(1, w / targetWidth);
             int sw = w / f, sh = h / f;

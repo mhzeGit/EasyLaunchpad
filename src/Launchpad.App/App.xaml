@@ -116,7 +116,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ContextMenu">
-                        <Border Background="#F01B1E27" BorderBrush="#33FFFFFF" BorderThickness="1" CornerRadius="10" Padding="4" MinWidth="190">
+                        <Border Background="#D91C1C1C" BorderBrush="#38FFFFFF" BorderThickness="1" CornerRadius="10" Padding="4" MinWidth="190">
                             <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
                         </Border>
                     </ControlTemplate>
@@ -131,11 +131,29 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="MenuItem">
                         <Border x:Name="Bd" CornerRadius="6" Padding="10,7" Background="Transparent">
-                            <ContentPresenter ContentSource="Header" RecognizesAccessKey="False"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter ContentSource="Header" RecognizesAccessKey="False"/>
+                                <TextBlock x:Name="SubmenuArrow" Grid.Column="1" Text="&#xE76C;" FontFamily="{StaticResource IconFont}"
+                                           FontSize="10" Foreground="{StaticResource SubtleTextBrush}" Margin="14,0,0,0"
+                                           VerticalAlignment="Center" Visibility="Collapsed"/>
+                                <Popup x:Name="PART_Popup" AllowsTransparency="True" Focusable="False" IsOpen="{TemplateBinding IsSubmenuOpen}"
+                                       Placement="Right" PopupAnimation="Fade" StaysOpen="False">
+                                    <Border Background="#D91C1C1C" BorderBrush="#38FFFFFF" BorderThickness="1" CornerRadius="10" Padding="4" MinWidth="190">
+                                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                                    </Border>
+                                </Popup>
+                            </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
+                            <Trigger Property="HasItems" Value="True">
+                                <Setter TargetName="SubmenuArrow" Property="Visibility" Value="Visible"/>
+                            </Trigger>
                             <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#33FFFFFF"/>
+                                <Setter TargetName="Bd" Property="Background" Value="#35FFFFFF"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.4"/>

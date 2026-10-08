@@ -3,7 +3,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
-using System.Windows.Threading;
 using Launchpad.Core.Apps;
 
 namespace Launchpad.App.UI;
@@ -45,7 +44,7 @@ public partial class MainWindow
     private long _lastPointerSampleAt;
     private double _pointerSpeed;
     private readonly Dictionary<string, Vector> _tileShift = new();
-    private DispatcherTimer? _edgeTimer;
+    private long _edgeFrameStamp;
     private bool _selfTestDrag;               // scripted drags have no physical button held
 
     // hover bookkeeping: which slot the pointer is over, since when, and the pending group (if any)
@@ -123,10 +122,9 @@ public partial class MainWindow
         _dragTile.Opacity = 0.94;
 
         HomeLayer.CaptureMouse();
-        _edgeTimer ??= new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(16) };
-        _edgeTimer.Tick -= OnEdgeTimer;
-        _edgeTimer.Tick += OnEdgeTimer;
-        _edgeTimer.Start();
+        _edgeFrameStamp = Stopwatch.GetTimestamp();
+        CompositionTarget.Rendering -= OnEdgeFrame;
+        CompositionTarget.Rendering += OnEdgeFrame;
         UpdateReorder();
     }
 
@@ -134,6 +132,13 @@ public partial class MainWindow
     {
         if (!_reordering || _dragTile == null || _dragItem == null) return;
 
+        UpdateDraggedTilePosition();
+        EvaluateHover();
+    }
+
+    private void UpdateDraggedTilePosition()
+    {
+        if (!_reordering || _dragTile == null || _dragItem == null) return;
         var pg = ToGrid(_pointerHome);
         var origin = SlotPos(_dragOrigIndex);
 
@@ -143,8 +148,6 @@ public partial class MainWindow
         tt.BeginAnimation(TranslateTransform.YProperty, null);
         tt.X = pg.X - _dragGrab.X - origin.X;
         tt.Y = pg.Y - _dragGrab.Y - origin.Y;
-
-        EvaluateHover();
     }
 
     /// <summary>The slot under the pointer, and whether the pointer is over the middle of the icon sitting there.</summary>
@@ -232,24 +235,41 @@ public partial class MainWindow
         }
     }
 
-    /// <summary>16 ms tick while dragging: dwell timing, plus scrolling when the pointer is near the top or bottom edge.</summary>
-    private void OnEdgeTimer(object? sender, EventArgs e)
+    /// <summary>Frame-synchronized hover dwell and edge scrolling while an icon is being rearranged.</summary>
+    private void OnEdgeFrame(object? sender, EventArgs e)
     {
-        if (!_reordering) return;
+        if (!_reordering)
+        {
+            CompositionTarget.Rendering -= OnEdgeFrame;
+            return;
+        }
+
+        long now = Stopwatch.GetTimestamp();
+        double dt = Math.Clamp((now - _edgeFrameStamp) / (double)Stopwatch.Frequency, 0, 0.05);
+        _edgeFrameStamp = now;
+        if (_cx.Scrolls && _maxScroll > 1 && dt > 0)
+        {
+            const double zone = 100, maxSpeed = 900; // DIPs per second; integrate by frame time to stay smooth at any refresh rate.
+            double y = _pointerHome.Y;
+            double progress = y < zone
+                ? Math.Clamp((zone - Math.Max(0, y)) / zone, 0, 1)
+                : y > _viewH - zone
+                    ? Math.Clamp((Math.Min(_viewH, y) - (_viewH - zone)) / zone, 0, 1)
+                    : 0;
+            double direction = y < zone ? -1 : 1;
+            double eased = progress * progress * (3 - 2 * progress);
+            if (eased > 0)
+            {
+                double next = Math.Clamp(_scrollY + direction * eased * maxSpeed * dt, 0, _maxScroll);
+                if (Math.Abs(next - _scrollY) > 0.001)
+                {
+                    _scrollTarget = _scrollY = next;
+                    ApplyScroll();
+                    UpdateDraggedTilePosition();
+                }
+            }
+        }
         EvaluateHover();
-        if (!_cx.Scrolls || _maxScroll <= 1) return;
-
-        const double zone = 90, maxSpeed = 22;
-        double y = _pointerHome.Y, speed = 0;
-        if (y < zone) speed = -(zone - Math.Max(0, y)) / zone * maxSpeed;
-        else if (y > _viewH - zone) speed = (Math.Min(_viewH, y) - (_viewH - zone)) / zone * maxSpeed;
-        if (speed == 0) return;
-
-        double next = Math.Clamp(_scrollY + speed, 0, _maxScroll);
-        if (Math.Abs(next - _scrollY) < 0.01) return;
-        _scrollTarget = _scrollY = next;
-        ApplyScroll();
-        UpdateReorder();   // the pointer is now over different content
     }
 
     private void FinishReorder()
@@ -257,7 +277,7 @@ public partial class MainWindow
         if (!_reordering || _dragTile == null || _dragItem == null) { _reordering = false; return; }
 
         _reordering = false;
-        _edgeTimer?.Stop();
+        CompositionTarget.Rendering -= OnEdgeFrame;
         HomeLayer.ReleaseMouseCapture();
 
         var tile = _dragTile;

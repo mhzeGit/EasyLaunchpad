@@ -7,6 +7,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
+using System.Runtime.InteropServices;
 using Launchpad.App.Apps;
 using Launchpad.App.Native;
 using Launchpad.App.Services;
@@ -16,15 +17,31 @@ namespace Launchpad.App.UI;
 
 public partial class MainWindow : Window
 {
+    [DllImport("secur32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool GetUserNameEx(int nameFormat, System.Text.StringBuilder userName, ref int size);
+    [DllImport("netapi32.dll", CharSet = CharSet.Unicode)]
+    private static extern int NetUserGetInfo(string? serverName, string userName, int level, out IntPtr buffer);
+    [DllImport("netapi32.dll")]
+    private static extern int NetApiBufferFree(IntPtr buffer);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct UserInfo10
+    {
+        public IntPtr Name, Comment, UserComment, FullName;
+    }
+
     private readonly AppSettings _settings;
 
     private IntPtr _hwnd;
     private List<AppItem> _allApps = new();
     private List<AppItem> _visibleApps = new();
+    private readonly List<Button> _applicationPickerButtons = new();
+    private int _applicationPickerSelection = -1;
 
     private bool _isOpen;
     private DateTime _shownAt;
     private bool _suppressDeactivate;
+    private bool _dockMenuOpen;
 
     // pager
     private int _cols = 1, _rows = 1;
@@ -42,6 +59,8 @@ public partial class MainWindow : Window
     public Action? RebuildIndexRequested { get; set; }
     public Action? RefreshAppsRequested { get; set; }
     public Action<bool>? IndexToggleRequested { get; set; }
+    public Action<string>? AddItemRequested { get; set; }
+    public Action<AppItem>? AddInstalledApplicationRequested { get; set; }
 
     /// <summary>Turns the Windows-key takeover on or off; returns false if the hook couldn't be installed.</summary>
     public Func<bool, bool>? WinKeyToggleRequested { get; set; }
@@ -50,15 +69,17 @@ public partial class MainWindow : Window
     {
         _settings = settings;
         InitializeComponent();
+        LoadWindowsProfile();
 
         SourceInitialized += OnSourceInitialized;
         Deactivated += (_, _) =>
         {
-            if (_isOpen && !_suppressDeactivate && (DateTime.UtcNow - _shownAt).TotalMilliseconds > 300) HideLaunchpad();
+            if (_isOpen && !_suppressDeactivate && !_dockMenuOpen && (DateTime.UtcNow - _shownAt).TotalMilliseconds > 300) HideLaunchpad();
         };
         Activated += (_, _) => { if (_isOpen && SettingsOverlay.Visibility != Visibility.Visible) SearchBox.Focus(); };
         PreviewKeyDown += OnPreviewKeyDown;
         PreviewMouseLeftButtonUp += OnWindowMouseUp;
+        PreviewMouseRightButtonUp += OnWindowMouseRightUp;
     }
 
     // ================================================================== window plumbing
@@ -113,7 +134,10 @@ public partial class MainWindow : Window
     private void PlaceOnMonitor(NativeMethods.Rect r)
     {
         if (_hwnd == IntPtr.Zero) _hwnd = new WindowInteropHelper(this).EnsureHandle();
-        NativeMethods.SetWindowPos(_hwnd, NativeMethods.HWND_TOPMOST, r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top, NativeMethods.SWP_NOACTIVATE);
+        NativeMethods.SetWindowPos(_hwnd, NativeMethods.HWND_NOTOPMOST, r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top, NativeMethods.SWP_NOACTIVATE);
+        // Re-assert topmost only after the window is visible. Clearing stale topmost state
+        // before placement lets Windows keep transient layered notifications above it.
+        if (IsVisible) NativeMethods.SetWindowPos(_hwnd, NativeMethods.HWND_TOPMOST, r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top, NativeMethods.SWP_NOACTIVATE);
     }
 
     public bool IsOpen => _isOpen;
@@ -255,6 +279,100 @@ public partial class MainWindow : Window
     {
         _allApps = apps;
         ApplyHidden();
+        if (ApplicationPicker.Visibility == Visibility.Visible) UpdateApplicationPickerResults();
+    }
+
+    public void ShowApplicationPicker()
+    {
+        ApplicationPickerSearch.Text = "";
+        ApplicationPicker.Visibility = Visibility.Visible;
+        UpdateApplicationPickerResults();
+        ApplicationPickerSearch.Focus();
+        Keyboard.Focus(ApplicationPickerSearch);
+    }
+
+    public void CloseApplicationPicker()
+    {
+        ApplicationPicker.Visibility = Visibility.Collapsed;
+        SearchBox.Focus();
+    }
+
+    private void OnApplicationPickerSearchChanged(object sender, TextChangedEventArgs e) => UpdateApplicationPickerResults();
+
+    private void UpdateApplicationPickerResults()
+    {
+        if (ApplicationPickerResults == null) return;
+        ApplicationPickerResults.Children.Clear();
+        _applicationPickerButtons.Clear();
+        _applicationPickerSelection = -1;
+        string query = ApplicationPickerSearch.Text.Trim();
+        if (query.Length == 0)
+        {
+            ApplicationPickerResults.Children.Add(new TextBlock { Text = "Type an app name to search installed applications", Foreground = (Brush)FindResource("SubtleTextBrush"), FontSize = 12.5, Margin = new Thickness(4, 4, 4, 10), TextWrapping = TextWrapping.Wrap });
+            return;
+        }
+
+        var matches = AppSearch.Search(_allApps, query, limit: 40);
+        if (matches.Count == 0)
+        {
+            ApplicationPickerResults.Children.Add(new TextBlock { Text = "No installed applications found", Foreground = (Brush)FindResource("SubtleTextBrush"), FontSize = 12.5, Margin = new Thickness(4, 4, 4, 10) });
+            return;
+        }
+
+        foreach (var app in matches)
+        {
+            var button = new Button
+            {
+                Background = Brushes.Transparent, BorderThickness = new Thickness(0), Foreground = Brushes.White,
+                HorizontalContentAlignment = HorizontalAlignment.Stretch, Padding = new Thickness(8, 7, 10, 7), Cursor = Cursors.Hand,
+                Content = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Children =
+                    {
+                        new Image { Source = app.Icon, Width = 34, Height = 34, Stretch = Stretch.Uniform, Margin = new Thickness(0, 0, 12, 0) },
+                        new TextBlock { Text = app.Name, FontSize = 13.5, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis }
+                    }
+                },
+                Tag = app,
+            };
+            button.MouseEnter += (_, _) => SetApplicationPickerSelection(_applicationPickerButtons.IndexOf(button));
+            button.Click += (_, _) => SelectApplicationPickerItem(_applicationPickerButtons.IndexOf(button));
+            _applicationPickerButtons.Add(button);
+            ApplicationPickerResults.Children.Add(button);
+        }
+        SetApplicationPickerSelection(0);
+    }
+
+    private void SetApplicationPickerSelection(int index)
+    {
+        if (_applicationPickerButtons.Count == 0) { _applicationPickerSelection = -1; return; }
+        _applicationPickerSelection = Math.Clamp(index, 0, _applicationPickerButtons.Count - 1);
+        for (int i = 0; i < _applicationPickerButtons.Count; i++)
+            _applicationPickerButtons[i].Background = i == _applicationPickerSelection
+                ? new SolidColorBrush(Color.FromArgb(0x35, 255, 255, 255))
+                : Brushes.Transparent;
+        _applicationPickerButtons[_applicationPickerSelection].BringIntoView();
+    }
+
+    private void SelectApplicationPickerItem(int index)
+    {
+        if (index < 0 || index >= _applicationPickerButtons.Count) return;
+        if (_applicationPickerButtons[index].Tag is AppItem selected) AddInstalledApplicationRequested?.Invoke(selected);
+        CloseApplicationPicker();
+    }
+
+    private bool NavigateApplicationPicker(int delta)
+    {
+        if (_applicationPickerButtons.Count == 0) return false;
+        int current = _applicationPickerSelection < 0 ? 0 : _applicationPickerSelection;
+        SetApplicationPickerSelection(Math.Clamp(current + delta, 0, _applicationPickerButtons.Count - 1));
+        return true;
+    }
+
+    private void OnApplicationPickerBackdropMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (ReferenceEquals(e.OriginalSource, ApplicationPicker)) { CloseApplicationPicker(); e.Handled = true; }
     }
 
     private void ApplyHidden()
@@ -638,8 +756,209 @@ public partial class MainWindow : Window
             }
             return;
         }
-        if (IsInside(src, HomeLayer) || IsInside(src, SearchHost) || IsInside(src, SettingsButton)) return;
+        if (IsInside(src, ApplicationPicker) || IsInside(src, HomeLayer) || IsInside(src, SearchHost) || IsInside(src, Dock)) return;
         HideLaunchpad();
+    }
+
+    private void OnWindowMouseRightUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!_isOpen || SettingsOverlay.Visibility == Visibility.Visible || ApplicationPicker.Visibility == Visibility.Visible) return;
+        var source = e.OriginalSource as DependencyObject;
+        // App and group tiles keep their existing actions and receive a settings entry in those menus.
+        if (FindAncestor<Border>(source, border => border.Tag is AppItem or GridItem) != null) return;
+        var menu = new ContextMenu { PlacementTarget = this, Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint };
+        var add = new MenuItem { Header = "Add item" };
+        AddItemOption(add, "Application…", "application");
+        AddItemOption(add, "Folder…", "folder");
+        AddItemOption(add, "File…", "file");
+        menu.Items.Add(add);
+        AddLaunchpadSettingsMenuItem(menu);
+        OpenTrackedContextMenu(menu);
+        e.Handled = true;
+    }
+
+    private void AddItemOption(MenuItem parent, string label, string kind)
+    {
+        var option = new MenuItem { Header = label };
+        option.Click += (_, _) => AddItemRequested?.Invoke(kind);
+        parent.Items.Add(option);
+    }
+
+    private void OnExplorerClick(object sender, RoutedEventArgs e)
+    {
+        try { Process.Start(new ProcessStartInfo("explorer.exe") { UseShellExecute = true }); HideLaunchpad(); }
+        catch (Exception) { }
+    }
+
+    private void OnDocumentsClick(object sender, RoutedEventArgs e) => OpenUserFolder(Environment.SpecialFolder.MyDocuments);
+
+    private void OnDownloadsClick(object sender, RoutedEventArgs e) => OpenUri("shell:Downloads");
+
+    private void OpenUserFolder(Environment.SpecialFolder folder)
+    {
+        try
+        {
+            string path = Environment.GetFolderPath(folder);
+            if (Directory.Exists(path)) Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            HideLaunchpad();
+        }
+        catch (Exception) { }
+    }
+
+    private void OnWindowsSettingsClick(object sender, RoutedEventArgs e) => OpenUri("ms-settings:");
+
+    private void OnAccountClick(object sender, RoutedEventArgs e)
+    {
+        var menu = CreateDockMenu();
+        menu.Items.Add(new MenuItem { Header = "Account settings" });
+        ((MenuItem)menu.Items[0]).Click += (_, _) => OpenUri("ms-settings:yourinfo");
+        var lockItem = new MenuItem { Header = "Lock" };
+        lockItem.Click += (_, _) => RunSystemCommand("rundll32.exe", "user32.dll,LockWorkStation", "lock");
+        menu.Items.Add(lockItem);
+        var signOutItem = new MenuItem { Header = "Sign out" };
+        signOutItem.Click += (_, _) => ConfirmSystemAction("Sign out", "Sign out of your Windows account?", "shutdown.exe", "/l");
+        menu.Items.Add(signOutItem);
+        OpenDockMenu(AccountButton, menu);
+    }
+
+    private void OnPowerClick(object sender, RoutedEventArgs e)
+    {
+        var menu = CreateDockMenu();
+        var sleepItem = new MenuItem { Header = "Sleep" };
+        sleepItem.Click += (_, _) => RunSystemCommand("rundll32.exe", "powrprof.dll,SetSuspendState 0,1,0", "sleep");
+        menu.Items.Add(sleepItem);
+        var shutdownItem = new MenuItem { Header = "Shut down" };
+        shutdownItem.Click += (_, _) => ConfirmSystemAction("Shut down", "Shut down this PC?", "shutdown.exe", "/s /t 0");
+        menu.Items.Add(shutdownItem);
+        var restartItem = new MenuItem { Header = "Restart" };
+        restartItem.Click += (_, _) => ConfirmSystemAction("Restart", "Restart this PC?", "shutdown.exe", "/r /t 0");
+        menu.Items.Add(restartItem);
+        OpenDockMenu(PowerButton, menu);
+    }
+
+    private static ContextMenu CreateDockMenu() => new() { Placement = System.Windows.Controls.Primitives.PlacementMode.Top, StaysOpen = false };
+
+    private static void OpenDockMenu(FrameworkElement anchor, ContextMenu menu)
+    {
+        menu.PlacementTarget = anchor;
+        if (Window.GetWindow(anchor) is MainWindow window) window.OpenTrackedContextMenu(menu);
+        else menu.IsOpen = true;
+    }
+
+    private void OpenTrackedContextMenu(ContextMenu menu)
+    {
+        _dockMenuOpen = true;
+        menu.Closed += (_, _) => _dockMenuOpen = false;
+        menu.Opened += (_, _) => Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (PresentationSource.FromVisual(menu) is HwndSource source)
+                NativeMethods.SetAccent(source.Handle, NativeMethods.ACCENT_ENABLE_ACRYLICBLURBEHIND, 0xD91C1C1C);
+        }), System.Windows.Threading.DispatcherPriority.Loaded);
+        menu.IsOpen = true;
+    }
+
+    private void AddLaunchpadSettingsMenuItem(ContextMenu menu)
+    {
+        if (menu.Items.Count > 0) menu.Items.Add(new Separator());
+        var settings = new MenuItem { Header = "Launchpad settings" };
+        settings.Click += (_, _) => OnSettingsClick(this, new RoutedEventArgs());
+        menu.Items.Add(settings);
+    }
+
+    private void LoadWindowsProfile()
+    {
+        string displayName = GetWindowsFullName() ?? Environment.UserName;
+        try
+        {
+            int length = 0;
+            GetUserNameEx(3 /* NameDisplay */, new System.Text.StringBuilder(1), ref length);
+            if (length > 1)
+            {
+                var name = new System.Text.StringBuilder(length);
+                if (GetUserNameEx(3, name, ref length) && !string.IsNullOrWhiteSpace(name.ToString())) displayName = name.ToString();
+            }
+        }
+        catch (Exception) { }
+
+        AccountName.Text = displayName;
+        AccountName.ToolTip = displayName;
+        AccountInitial.Text = displayName.Trim().FirstOrDefault(char.IsLetterOrDigit).ToString().ToUpperInvariant();
+        string? photoPath = FindAccountPhoto();
+        if (photoPath == null) return;
+        try
+        {
+            using var stream = File.OpenRead(photoPath);
+            var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+            BitmapSource image = decoder.Frames[0];
+            image.Freeze();
+            AccountPhoto.Fill = new ImageBrush(image) { Stretch = Stretch.UniformToFill };
+            AccountPhoto.Visibility = Visibility.Visible;
+            AccountInitial.Visibility = Visibility.Collapsed;
+        }
+        catch (Exception) { }
+    }
+
+    private static string? FindAccountPhoto()
+    {
+        try
+        {
+            string sid = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? "";
+            if (sid.Length > 0)
+            {
+                using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey($@"SOFTWARE\Microsoft\Windows\CurrentVersion\AccountPicture\Users\{sid}");
+                foreach (string imageKey in new[] { "Image448", "Image424", "Image208", "Image96", "Image64" })
+                    if (key?.GetValue(imageKey) is string imagePath && File.Exists(imagePath)) return imagePath;
+            }
+        }
+        catch (Exception) { }
+
+        // Newer Microsoft-account profile photos can be held in CloudExperienceHost's account cache.
+        string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Packages",
+            "Microsoft.Windows.CloudExperienceHost_cw5n1h2txyewy", "AC", "TokenBroker", "Accounts");
+        if (!Directory.Exists(folder)) return null;
+        try
+        {
+            return Directory.EnumerateFiles(folder)
+                .Where(path => Path.GetFileName(path).Contains("tbacctpic", StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(path => path.EndsWith("1080x1080", StringComparison.OrdinalIgnoreCase))
+                .ThenByDescending(path => path.EndsWith("424x424", StringComparison.OrdinalIgnoreCase))
+                .ThenByDescending(path => path.EndsWith("208x208", StringComparison.OrdinalIgnoreCase))
+                .ThenByDescending(path => File.GetLastWriteTimeUtc(path))
+                .FirstOrDefault();
+        }
+        catch (Exception) { return null; }
+    }
+
+    private static string? GetWindowsFullName()
+    {
+        IntPtr buffer = IntPtr.Zero;
+        try
+        {
+            if (NetUserGetInfo(null, Environment.UserName, 10, out buffer) != 0 || buffer == IntPtr.Zero) return null;
+            var info = Marshal.PtrToStructure<UserInfo10>(buffer);
+            string? fullName = Marshal.PtrToStringUni(info.FullName);
+            return string.IsNullOrWhiteSpace(fullName) ? null : fullName;
+        }
+        catch (Exception) { return null; }
+        finally { if (buffer != IntPtr.Zero) NetApiBufferFree(buffer); }
+    }
+
+    private void OpenUri(string uri)
+    {
+        try { Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true }); HideLaunchpad(); }
+        catch (Exception) { }
+    }
+
+    private void RunSystemCommand(string fileName, string arguments, string action)
+    {
+        try { Process.Start(new ProcessStartInfo(fileName, arguments) { UseShellExecute = true }); HideLaunchpad(); }
+        catch (Exception) { MessageBox.Show(this, $"Windows couldn't {action}.", "Launchpad", MessageBoxButton.OK, MessageBoxImage.Warning); }
+    }
+
+    private void ConfirmSystemAction(string title, string message, string fileName, string arguments)
+    {
+        if (MessageBox.Show(this, message, title, MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) == MessageBoxResult.Yes)
+            RunSystemCommand(fileName, arguments, title.ToLowerInvariant());
     }
 
     // ================================================================== launching
@@ -674,8 +993,9 @@ public partial class MainWindow : Window
             ApplyHidden();
         };
         menu.Items.Add(hide);
+        AddLaunchpadSettingsMenuItem(menu);
         menu.PlacementTarget = anchor;
-        menu.IsOpen = true;
+        OpenTrackedContextMenu(menu);
     }
 
     private static void Reveal(string path)
@@ -716,6 +1036,11 @@ public partial class MainWindow : Window
         EmptyAppsText.Text = words.Length == 0 ? "Loading apps…" : "No matching apps";
         EmptyAppsText.Visibility = _items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         RebuildPages(resetScrollForSearch: resetScroll);
+        if (words.Length > 0 && _items.Count > 0)
+        {
+            _focusedSearchItem = 0;
+            HighlightSearchItem(0);
+        }
     }
 
     // ================================================================== keyboard
@@ -723,6 +1048,23 @@ public partial class MainWindow : Window
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (_capturingHotkey) return;   // handled by the hotkey button
+
+        if (ApplicationPicker.Visibility == Visibility.Visible)
+        {
+            switch (e.Key)
+            {
+                case Key.Escape: CloseApplicationPicker(); e.Handled = true; break;
+                case Key.Down: NavigateApplicationPicker(1); e.Handled = true; break;
+                case Key.Up: NavigateApplicationPicker(-1); e.Handled = true; break;
+                case Key.Home: SetApplicationPickerSelection(0); e.Handled = true; break;
+                case Key.End: SetApplicationPickerSelection(_applicationPickerButtons.Count - 1); e.Handled = true; break;
+                case Key.Enter:
+                    if (_applicationPickerSelection >= 0) SelectApplicationPickerItem(_applicationPickerSelection);
+                    e.Handled = true;
+                    break;
+            }
+            return;
+        }
 
         if (GroupNameBox.IsKeyboardFocused) return;   // typing a group name: the box's own handler deals with Enter / Esc
 
@@ -781,13 +1123,18 @@ public partial class MainWindow : Window
         }
 
         _focusedSearchItem = target;
+        HighlightSearchItem(target);
+    }
+
+    private void HighlightSearchItem(int index)
+    {
         foreach (var candidate in _tileById.Values) candidate.Background = Brushes.Transparent;
-        var item = _items[_focusedSearchItem];
+        if (index < 0 || index >= _items.Count) return;
+        var item = _items[index];
         if (_tileById.TryGetValue(item.Id, out var tile))
         {
             tile.Background = new SolidColorBrush(Color.FromArgb(0x38, 255, 255, 255));
             tile.Focusable = true;
-            Keyboard.Focus(tile);
             double tileY = Canvas.GetTop(tile) + _gridTop;
             if (tileY < _scrollY + 24) ScrollTo(tileY - 24);
             else if (tileY + _cellH > _scrollY + _viewH - 24) ScrollTo(tileY + _cellH - _viewH + 24);

@@ -81,8 +81,8 @@ public partial class MainWindow
         {
             Width = plateSize, Height = plateSize, CornerRadius = new CornerRadius(plateSize * 0.2237),
             HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
-            Background = new LinearGradientBrush(Color.FromArgb(0x6E, 255, 255, 255), Color.FromArgb(0x30, 255, 255, 255), 90),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(0x78, 255, 255, 255)), BorderThickness = new Thickness(1),
+            Background = new LinearGradientBrush(Color.FromArgb(0x48, 255, 255, 255), Color.FromArgb(0x20, 255, 255, 255), 90),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0x50, 255, 255, 255)), BorderThickness = new Thickness(1),
         };
 
         int dim = members.Count <= 4 ? 2 : 3;
@@ -166,7 +166,8 @@ public partial class MainWindow
         var ungroup = new MenuItem { Header = "Ungroup" };
         ungroup.Click += (_, _) => Ungroup(g);
         menu.Items.Add(open); menu.Items.Add(rename); menu.Items.Add(new Separator()); menu.Items.Add(ungroup);
-        menu.IsOpen = true;
+        AddLaunchpadSettingsMenuItem(menu);
+        OpenTrackedContextMenu(menu);
     }
 
     // ------------------------------------------------------------------ live "becomes a group" preview
