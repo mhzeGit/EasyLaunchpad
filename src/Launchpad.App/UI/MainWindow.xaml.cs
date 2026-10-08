@@ -607,7 +607,7 @@ public partial class MainWindow : Window
     {
         if (SettingsOverlay.Visibility == Visibility.Visible) return;
         var src = e.OriginalSource as DependencyObject;
-        if (IsInside(src, SearchHost) || IsInside(src, SettingsButton)) return;
+        if (IsInside(src, HomeLayer) || IsInside(src, SearchHost) || IsInside(src, SettingsButton)) return;
         HideLaunchpad();
     }
 
