@@ -298,7 +298,14 @@ public partial class MainWindow : Window
         _maxScroll = Math.Max(0, _contentH - h);
 
         // tiles are placed absolutely on a Canvas so they can be slid around smoothly while rearranging
-        var grid = new Canvas { Width = cellW * _cols, Height = gridH };
+        // The app icons are already cached as frozen bitmaps on disk. Cache their composed tile visuals too,
+        // so scrolling translates one rasterized surface instead of rerendering every icon and label each frame.
+        var grid = new Canvas
+        {
+            Width = cellW * _cols,
+            Height = gridH,
+            CacheMode = new BitmapCache { RenderAtScale = 1.0, SnapsToDevicePixels = true, EnableClearType = true },
+        };
         _tileById.Clear();
         _origIndexById.Clear();
         for (int i = 0; i < _items.Count; i++)
@@ -441,7 +448,7 @@ public partial class MainWindow : Window
             CompositionTarget.Rendering -= OnScrollFrame;
             Diag.Log($"scroll settled at {_scrollY:0}/{_maxScroll:0} after {_scrollFrames} frames in {(now - _scrollBegan) * 1000.0 / Stopwatch.Frequency:0} ms");
         }
-        else _scrollY += diff * (1 - Math.Exp(-dt * 13));
+        else _scrollY += diff * (1 - Math.Exp(-dt * 22));
         ApplyScroll();
     }
 
