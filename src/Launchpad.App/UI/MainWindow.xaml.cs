@@ -672,7 +672,11 @@ public partial class MainWindow : Window
     private void ApplySearchFilter()
     {
         string[] words = SearchBox.Text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-        _items = BuildItems(_visibleApps.Where(app => words.All(word => app.Name.Contains(word, StringComparison.OrdinalIgnoreCase))).ToList());
+        bool Matches(string name) => words.All(word => name.Contains(word, StringComparison.OrdinalIgnoreCase));
+        var matchingApps = _visibleApps.Where(app => Matches(app.Name)).ToList();
+        foreach (var group in _settings.Groups.Where(group => Matches(group.Name)))
+            matchingApps.AddRange(_visibleApps.Where(app => group.AppIds.Contains(app.Id, StringComparer.OrdinalIgnoreCase)));
+        _items = BuildItems(matchingApps.DistinctBy(app => app.Id).ToList());
         if (_openGroup != null)
             _items = _items.Where(item => item.App != null && _openGroup.AppIds.Contains(item.App.Id, StringComparer.OrdinalIgnoreCase)).ToList();
         _focusedSearchItem = -1;

@@ -35,16 +35,15 @@ Launch it with `--background` (what "Start with Windows" uses) to stay hidden un
 * **Stays current** – on start the saved snapshot is shown immediately and *reconciled* with the disk in the background
   (only differences are applied). While running, `ReadDirectoryChangesW` notifications are applied in small debounced
   batches: creates, deletes, renames and moves (a folder rename is O(1) because children point at their parent's id),
-  size/time changes. If Windows drops notifications, a quiet re-reconcile runs. Opening a result that vanished removes it.
-* **Search** – cheap array filters first (flags, extension id, size, time), then SIMD `OrdinalIgnoreCase` name search,
-  in parallel over the whole index; full paths are built only for survivors; top-K selection by heap. Typical queries are
-  4-40 ms over 2.2 M files, and stay ~12 ms median while a scan is running.
+  size/time changes. If Windows drops notifications, a quiet re-reconcile runs.
+* **Search** – filters the apps and groups already shown in Launchpad by name. Space-separated words must all match;
+  results keep the current grid ordering and keyboard arrows move focus through the grid.
 * **Blur** – the monitor is captured, shrunk, blurred and graded on the CPU, then crossfaded in. Because the overlay is
   excluded from screen capture it can appear first and grab the desktop afterwards, and it does not depend on Windows'
   "Transparency effects" setting (which is often off).
 * **Real apps only** – the Start menu lists far more than people open: admin consoles, developer command prompts, documentation
-  links, updaters, diagnostics. A classifier (`AppClassifier`, with tests built from real entries) keeps those out of the grid but
-  still searchable; Settings → "Show system tools and helpers" brings them back, and right-click → Hide removes any single app.
+  links, updaters, diagnostics. A classifier (`AppClassifier`, with tests built from real entries) keeps those out of the grid;
+  Settings → "Show system tools and helpers" brings them back, and right-click → Hide removes any single app.
 * **Icons** – every app's own icon is re-rendered consistently. Opaque, full-bleed icons fill a rounded glossy tile (shadow,
   rim light, gloss). Icons with transparent areas keep them: the artwork is scaled up and drawn on its own with a soft shadow, no
   tile behind it. A flat-coloured plate with just a tiny logo, or a pale white/grey backing behind a drawing, is removed. Where an opaque plate has transparent corners (a rounded body, a dome), the tile there takes the plate's own colour instead of white. Results are cached on disk.
