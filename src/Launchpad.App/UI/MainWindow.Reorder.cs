@@ -17,9 +17,9 @@ namespace Launchpad.App.UI;
 public partial class MainWindow
 {
     private const double DragSlop = 6;         // DIPs of movement before a pressed icon starts to drag
-    private const int GroupDwellMs = 40;       // over the middle of another icon: the group shows at once (this only filters out a pointer merely passing through)
-    private const int SlowReorderDwellMs = 200;
-    private const double FastDragSpeed = 700;  // DIPs per second; faster movement reorders immediately
+    private const int GroupDwellMs = 100;      // deliberate centre hover previews a group
+    private const int SlowReorderDwellMs = 500;
+    private const double FastDragSpeed = 900; // DIPs per second; only a fast sweep reorders immediately
 
     // grid geometry, set by RebuildPages
     private double _cellW;
@@ -157,7 +157,7 @@ public partial class MainWindow
 
         var slot = SlotPos(idx);
         double dx = pg.X - (slot.X + _cx.CellW / 2), dy = pg.Y - (slot.Y + _cx.CellH * 0.42);   // the icon sits a little above the cell's centre
-        bool centre = Math.Abs(dx) < _cx.CellW * 0.26 && Math.Abs(dy) < _cx.CellH * 0.28;
+        bool centre = Math.Abs(dx) < _cx.CellW * 0.36 && Math.Abs(dy) < _cx.CellH * 0.36;
         return (idx, centre);
     }
 

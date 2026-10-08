@@ -29,7 +29,9 @@ public partial class MainWindow : Window
     // pager
     private int _cols = 1, _rows = 1;
     private bool _mouseDown, _dragging;
+    private bool _suppressTileClick;
     private Point _dragStart;
+    private int _focusedSearchItem = -1;
 
     // hot key capture
     private bool _capturingHotkey;
@@ -286,7 +288,8 @@ public partial class MainWindow : Window
 
         int totalRows = Math.Max(1, (int)Math.Ceiling(_items.Count / (double)_cols));
         double gridH = totalRows * cellH;
-        double padTop = Math.Max(52, (h - gridH) / 2);   // inside a group: just below the name bar; otherwise a short list sits centred and a long one starts near the top
+        // Keep search results anchored below the search box; otherwise retain the launcher's short-list centering.
+        double padTop = SearchBox.Text.Length > 0 ? 52 : Math.Max(52, (h - gridH) / 2);
         const double padBottom = 64;
         _cellH = cellH;
         _viewH = h;
@@ -331,8 +334,12 @@ public partial class MainWindow : Window
         mask.Freeze();
         PagerMask.OpacityMask = mask;
 
-        _scrollTarget = Math.Clamp(_scrollTarget, 0, _maxScroll);
-        _scrollY = Math.Clamp(_scrollY, 0, _maxScroll);
+        if (SearchBox.Text.Length > 0) _scrollTarget = _scrollY = 0;
+        else
+        {
+            _scrollTarget = Math.Clamp(_scrollTarget, 0, _maxScroll);
+            _scrollY = Math.Clamp(_scrollY, 0, _maxScroll);
+        }
         ApplyScroll(showThumb: false);
         Diag.Log($"RebuildPages w={w:0} h={h:0} cols={_cols} rowsVisible={_rows} totalRows={totalRows} cell={cellW:0}x{cellH:0} icon={iconSize:0} items={_items.Count} content={_contentH:0} max={_maxScroll:0}");
     }
@@ -383,7 +390,7 @@ public partial class MainWindow : Window
         tile.PreviewMouseLeftButtonDown += (_, _) => Animate(scale, ScaleTransform.ScaleXProperty, 0.93, 80, null, null, also: ScaleTransform.ScaleYProperty);
         tile.MouseLeftButtonUp += (_, e) =>
         {
-            if (_dragging) return;
+            if (_suppressTileClick || _dragging || _reordering) { e.Handled = true; return; }
             e.Handled = true;
             LaunchApp(app);
         };
@@ -492,6 +499,7 @@ public partial class MainWindow : Window
 
     private void OnPagerMouseDown(object sender, MouseButtonEventArgs e)
     {
+        if (SearchBox.Text.Length > 0) SearchBox.Focus();
         if (_openGroup != null)
         {
             if (!IsInside(e.OriginalSource as DependencyObject, GroupHost)) { ExitGroup(); e.Handled = true; return; }   // click outside closes it
@@ -502,6 +510,7 @@ public partial class MainWindow : Window
         _pressed = true;
         _mouseDown = _openGroup == null && _maxScroll > 1;
         _dragging = false;
+        _suppressTileClick = false;
         _dragStart = e.GetPosition(HomeLayer);
         _pointerHome = _dragStart;
         ResetPointerSpeed(_dragStart);
@@ -529,6 +538,7 @@ public partial class MainWindow : Window
         // an icon was pressed and the pointer moved: pick it up straight away (no hold needed)
         if (_holdTile != null && (Math.Abs(pos.X - _holdStart.X) > DragSlop || Math.Abs(pos.Y - _holdStart.Y) > DragSlop))
         {
+            _suppressTileClick = true;
             StartReorder();
             if (_reordering) { UpdateReorder(); return; }
         }
@@ -542,6 +552,7 @@ public partial class MainWindow : Window
         {
             CancelHold();
             _dragging = true;
+            _suppressTileClick = true;
             HomeLayer.CaptureMouse();
             _dragStart.Y = y;                 // start from here so the content doesn't jump by the dead zone
             _dragStartScroll = _scrollY;
@@ -571,12 +582,14 @@ public partial class MainWindow : Window
 
         if (wasReordering)
         {
+            _suppressTileClick = true;
             e.Handled = true;      // dropping an icon must not also launch it
             FinishReorder();
             return;
         }
         if (wasDragging)
         {
+            _suppressTileClick = true;
             HomeLayer.ReleaseMouseCapture();
             e.Handled = true;
             // let it coast a little in the direction of the flick
@@ -662,6 +675,9 @@ public partial class MainWindow : Window
         _items = BuildItems(_visibleApps.Where(app => words.All(word => app.Name.Contains(word, StringComparison.OrdinalIgnoreCase))).ToList());
         if (_openGroup != null)
             _items = _items.Where(item => item.App != null && _openGroup.AppIds.Contains(item.App.Id, StringComparer.OrdinalIgnoreCase)).ToList();
+        _focusedSearchItem = -1;
+        foreach (var tile in _tileById.Values) tile.Background = Brushes.Transparent;
+        _scrollTarget = _scrollY = 0;
         EmptyAppsText.Text = words.Length == 0 ? "Loading apps…" : "No matching apps";
         EmptyAppsText.Visibility = _items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         RebuildPages();
@@ -691,10 +707,14 @@ public partial class MainWindow : Window
                 break;
 
             case Key.Enter:
-                ActivateFirstMatch();
+                if (SearchBox.Text.Length > 0) ActivateSearchItem();
                 e.Handled = true;
                 break;
 
+            case Key.Down when SearchBox.Text.Length > 0: NavigateSearchItems(0, 1); e.Handled = true; break;
+            case Key.Up when SearchBox.Text.Length > 0: NavigateSearchItems(0, -1); e.Handled = true; break;
+            case Key.Right when SearchBox.Text.Length > 0: NavigateSearchItems(1, 0); e.Handled = true; break;
+            case Key.Left when SearchBox.Text.Length > 0: NavigateSearchItems(-1, 0); e.Handled = true; break;
             case Key.Down: ScrollBy(_cellH); e.Handled = true; break;
             case Key.Up: ScrollBy(-_cellH); e.Handled = true; break;
             case Key.PageDown: ScrollBy(_viewH - _cellH * 0.5); e.Handled = true; break;
@@ -706,12 +726,46 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ActivateFirstMatch()
+    private void NavigateSearchItems(int dx, int dy)
     {
-        if (string.IsNullOrWhiteSpace(SearchBox.Text)) return;
-        var first = _items.FirstOrDefault();
-        if (first?.App != null) LaunchApp(first.App);
-        else if (first?.Group != null) EnterGroup(first.Group);
+        if (_items.Count == 0) return;
+        int target;
+        if (_focusedSearchItem < 0) target = 0;
+        else
+        {
+            int col = _focusedSearchItem % _cols;
+            int row = _focusedSearchItem / _cols;
+            int targetCol = col + dx;
+            int targetRow = row + dy;
+            if (targetCol < 0 || targetCol >= _cols || targetRow < 0) target = _focusedSearchItem;
+            else
+            {
+                target = targetRow * _cols + targetCol;
+                if (target >= _items.Count) target = _focusedSearchItem;
+            }
+        }
+
+        _focusedSearchItem = target;
+        foreach (var candidate in _tileById.Values) candidate.Background = Brushes.Transparent;
+        var item = _items[_focusedSearchItem];
+        if (_tileById.TryGetValue(item.Id, out var tile))
+        {
+            tile.Background = new SolidColorBrush(Color.FromArgb(0x38, 255, 255, 255));
+            tile.Focusable = true;
+            Keyboard.Focus(tile);
+            double tileY = Canvas.GetTop(tile) + _gridTop;
+            if (tileY < _scrollY + 24) ScrollTo(tileY - 24);
+            else if (tileY + _cellH > _scrollY + _viewH - 24) ScrollTo(tileY + _cellH - _viewH + 24);
+        }
+    }
+
+    private void ActivateSearchItem()
+    {
+        if (_items.Count == 0) return;
+        if (_focusedSearchItem < 0) _focusedSearchItem = 0;
+        var item = _items[_focusedSearchItem];
+        if (item.App != null) LaunchApp(item.App);
+        else if (item.Group != null) EnterGroup(item.Group);
     }
 
     // ================================================================== settings overlay

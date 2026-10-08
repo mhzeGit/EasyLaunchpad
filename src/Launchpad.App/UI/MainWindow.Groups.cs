@@ -63,9 +63,12 @@ public partial class MainWindow
         {
             var tile = CreateTile(item.App, iconSize, cellW, cellH, compact: false, highlight: false);
             tile.Tag = item;
+            tile.Focusable = true;
             return tile;
         }
-        return CreateGroupTile(item, iconSize, cellW, cellH);
+        var groupTile = CreateGroupTile(item, iconSize, cellW, cellH);
+        groupTile.Focusable = true;
+        return groupTile;
     }
 
     // ------------------------------------------------------------------ the folder icon and tile
@@ -144,7 +147,7 @@ public partial class MainWindow
         tile.MouseLeave += (_, _) => { if (!_reordering) Animate(scale, ScaleTransform.ScaleXProperty, 1.0, 160, null, null, also: ScaleTransform.ScaleYProperty); };
         tile.MouseLeftButtonUp += (_, e) =>
         {
-            if (_dragging) return;
+            if (_suppressTileClick || _dragging || _reordering) { e.Handled = true; return; }
             e.Handled = true;
             EnterGroup(item.Group!);
         };
