@@ -263,7 +263,7 @@ public partial class MainWindow : Window
         _visibleApps = _allApps.Where(a => !hidden.Contains(a.Id) && (_settings.ShowAllApps || !a.IsUtility)).ToList();
         _items = BuildItems(_visibleApps);   // apps and groups, in the chosen order
         EmptyAppsText.Visibility = _items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        RebuildPages();
+        RebuildPages(resetScrollForSearch: false);
         if (_openGroup != null)
         {
             if (!_settings.Groups.Contains(_openGroup)) ExitGroup(refresh: false);
@@ -274,7 +274,7 @@ public partial class MainWindow : Window
 
     private void OnHomeSizeChanged(object sender, SizeChangedEventArgs e) => RebuildPages();
 
-    private void RebuildPages()
+    private void RebuildPages(bool resetScrollForSearch = true)
     {
         double w = HomeLayer.ActualWidth, h = HomeLayer.ActualHeight;
         if (w < 200 || h < 200) return;
@@ -335,7 +335,7 @@ public partial class MainWindow : Window
         mask.Freeze();
         PagerMask.OpacityMask = mask;
 
-        if (SearchBox.Text.Length > 0) _scrollTarget = _scrollY = 0;
+        if (resetScrollForSearch && SearchBox.Text.Length > 0) _scrollTarget = _scrollY = 0;
         else
         {
             _scrollTarget = Math.Clamp(_scrollTarget, 0, _maxScroll);
@@ -684,7 +684,7 @@ public partial class MainWindow : Window
         string text = SearchBox.Text;
         Placeholder.Visibility = text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         ClearButton.Visibility = text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
-        ApplySearchFilter();
+        ApplySearchFilter(resetScroll: true);
     }
 
     private void OnClearClick(object sender, RoutedEventArgs e)
@@ -693,7 +693,7 @@ public partial class MainWindow : Window
         SearchBox.Focus();
     }
 
-    private void ApplySearchFilter()
+    private void ApplySearchFilter(bool resetScroll = false)
     {
         string[] words = SearchBox.Text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         bool Matches(string name) => words.All(word => name.Contains(word, StringComparison.OrdinalIgnoreCase));
@@ -705,10 +705,10 @@ public partial class MainWindow : Window
             _items = _items.Where(item => item.App != null && _openGroup.AppIds.Contains(item.App.Id, StringComparer.OrdinalIgnoreCase)).ToList();
         _focusedSearchItem = -1;
         foreach (var tile in _tileById.Values) tile.Background = Brushes.Transparent;
-        _scrollTarget = _scrollY = 0;
+        if (resetScroll) _scrollTarget = _scrollY = 0;
         EmptyAppsText.Text = words.Length == 0 ? "Loading apps…" : "No matching apps";
         EmptyAppsText.Visibility = _items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        RebuildPages();
+        RebuildPages(resetScrollForSearch: resetScroll);
     }
 
     // ================================================================== keyboard
