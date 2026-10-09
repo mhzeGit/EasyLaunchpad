@@ -57,6 +57,19 @@ public partial class MainWindow
         return AppOrdering.Apply(items, AppOrdering.Parse(_settings.AppSort), _settings.AppOrder, i => i.Id, i => i.Name, i => i.Launches);
     }
 
+    /// <summary>During search, show matching group members as regular app tiles instead of collapsing them into folders.</summary>
+    private List<GridItem> BuildStandaloneItems(IEnumerable<AppItem> apps)
+    {
+        var items = apps.Select(app => new GridItem
+        {
+            Id = app.Id,
+            Name = app.Name,
+            App = app,
+            Launches = _settings.Launches.GetValueOrDefault(app.Id),
+        }).ToList();
+        return AppOrdering.Apply(items, AppOrdering.Parse(_settings.AppSort), _settings.AppOrder, i => i.Id, i => i.Name, i => i.Launches);
+    }
+
     private Border CreateGridTile(GridItem item, double iconSize, double cellW, double cellH)
     {
         if (item.App != null)

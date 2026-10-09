@@ -824,16 +824,35 @@ public partial class MainWindow : Window
     private void OnPowerClick(object sender, RoutedEventArgs e)
     {
         var menu = CreateDockMenu();
-        var sleepItem = new MenuItem { Header = "Sleep" };
-        sleepItem.Click += (_, _) => RunSystemCommand("rundll32.exe", "powrprof.dll,SetSuspendState 0,1,0", "sleep");
-        menu.Items.Add(sleepItem);
-        var shutdownItem = new MenuItem { Header = "Shut down" };
-        shutdownItem.Click += (_, _) => ConfirmSystemAction("Shut down", "Shut down this PC?", "shutdown.exe", "/s /t 0");
-        menu.Items.Add(shutdownItem);
-        var restartItem = new MenuItem { Header = "Restart" };
-        restartItem.Click += (_, _) => ConfirmSystemAction("Restart", "Restart this PC?", "shutdown.exe", "/r /t 0");
-        menu.Items.Add(restartItem);
+        menu.Items.Add(CreatePowerMenuItem("Lock", "\uE72E", () => RunSystemCommand("rundll32.exe", "user32.dll,LockWorkStation", "lock")));
+        menu.Items.Add(CreatePowerMenuItem("Sleep", "\uE708", () => RunSystemCommand("rundll32.exe", "powrprof.dll,SetSuspendState 0,1,0", "sleep")));
+        menu.Items.Add(CreatePowerMenuItem("Shut down", "\uE7E8", () => ConfirmSystemAction("Shut down", "Shut down this PC?", "shutdown.exe", "/s /t 0")));
+        menu.Items.Add(CreatePowerMenuItem("Restart", "\uE72C", () => ConfirmSystemAction("Restart", "Restart this PC?", "shutdown.exe", "/r /t 0")));
         OpenDockMenu(PowerButton, menu);
+    }
+
+    private static MenuItem CreatePowerMenuItem(string label, string glyph, Action action)
+    {
+        var header = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, IsHitTestVisible = false };
+        var iconText = new TextBlock
+        {
+            Text = glyph,
+            FontFamily = (FontFamily)Application.Current.FindResource("IconFont"),
+            FontSize = 16,
+            Width = 26,
+            Margin = new Thickness(0, 0, 8, 0),
+            Foreground = Brushes.White,
+            TextAlignment = TextAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            UseLayoutRounding = true,
+            SnapsToDevicePixels = true,
+        };
+        TextOptions.SetTextFormattingMode(iconText, TextFormattingMode.Display);
+        header.Children.Add(iconText);
+        header.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center });
+        var item = new MenuItem { Header = header };
+        item.Click += (_, _) => action();
+        return item;
     }
 
     private static ContextMenu CreateDockMenu() => new() { Placement = System.Windows.Controls.Primitives.PlacementMode.Top, StaysOpen = false };
@@ -1024,10 +1043,15 @@ public partial class MainWindow : Window
     {
         string[] words = SearchBox.Text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         bool Matches(string name) => words.All(word => name.Contains(word, StringComparison.OrdinalIgnoreCase));
-        var matchingApps = _visibleApps.Where(app => Matches(app.Name)).ToList();
-        foreach (var group in _settings.Groups.Where(group => Matches(group.Name)))
-            matchingApps.AddRange(_visibleApps.Where(app => group.AppIds.Contains(app.Id, StringComparer.OrdinalIgnoreCase)));
-        _items = BuildItems(matchingApps.DistinctBy(app => app.Id).ToList());
+        if (words.Length == 0)
+            _items = BuildItems(_visibleApps);
+        else
+        {
+            var matchingApps = _visibleApps.Where(app => Matches(app.Name)).ToList();
+            foreach (var group in _settings.Groups.Where(group => Matches(group.Name)))
+                matchingApps.AddRange(_visibleApps.Where(app => group.AppIds.Contains(app.Id, StringComparer.OrdinalIgnoreCase)));
+            _items = BuildStandaloneItems(matchingApps.DistinctBy(app => app.Id));
+        }
         if (_openGroup != null)
             _items = _items.Where(item => item.App != null && _openGroup.AppIds.Contains(item.App.Id, StringComparer.OrdinalIgnoreCase)).ToList();
         _focusedSearchItem = -1;
