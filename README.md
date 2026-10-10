@@ -16,7 +16,7 @@ Double-click **`build.bat`**: it stops a running copy, cleans, builds to `dist\`
 | Action | How |
 |---|---|
 | Open / close | **Ctrl+Alt+L** (change it in Settings; if the combo is taken Launchpad picks a free one and tells you) |
-| Open with the Windows key (optional) | Settings → "Windows key opens Launchpad". A lone tap opens/closes Launchpad instead of the Start menu; Win+E, Win+D, Win+Shift+S… are untouched. (Not seen while an elevated window has focus.) |
+| Open with the Windows key (on by default) | Turn it off in Settings → "Windows key opens Launchpad". A lone tap opens/closes Launchpad instead of the Start menu; Win+E, Win+D, Win+Shift+S… are untouched. (Not seen while an elevated window has focus.) |
 | Add an item | In File Explorer, right-click a file, shortcut, or folder and choose **Add to Launchpad**. |
 | Open / close from another tool | `Launchpad.exe --toggle` (plain `Launchpad.exe` always opens it) |
 | Rearrange icons | press an icon and drag it - it lifts immediately, the others slide aside, the grid auto-scrolls at the edges, release to place it. The order is remembered (Settings → Arrange apps: A–Z / Most used / Custom). Dragging empty space scrolls |

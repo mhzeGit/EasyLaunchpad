@@ -22,8 +22,8 @@ public sealed class AppSettings
 
     public bool LaunchAtLogin { get; set; }
 
-    /// <summary>Opt-in: a lone tap of the Windows key opens Launchpad instead of the Start menu (Win+other shortcuts are untouched).</summary>
-    public bool WinKeyOpensLaunchpad { get; set; }
+    /// <summary>On by default (can be switched off in Settings): a lone tap of the Windows key opens Launchpad instead of the Start menu (Win+other shortcuts are untouched).</summary>
+    public bool WinKeyOpensLaunchpad { get; set; } = true;
 
     /// <summary>Ids of apps the user hid from the grid.</summary>
     public List<string> HiddenApps { get; set; } = new();
