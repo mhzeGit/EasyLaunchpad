@@ -18,6 +18,7 @@ public sealed class WinKeyHook : IDisposable
     private const int WM_KEYDOWN = 0x0100, WM_KEYUP = 0x0101, WM_SYSKEYDOWN = 0x0104, WM_SYSKEYUP = 0x0105;
     private const uint LLKHF_INJECTED = 0x10;
     private const ushort VK_UNASSIGNED = 0xE8;   // a key that does nothing, used to cancel the Start menu
+    private static readonly IntPtr OwnMarker = new(0x4C50414E);   // "LPAN": tags the keys we inject so we can tell them from other programs'
 
     private delegate IntPtr HookProc(int code, IntPtr wParam, IntPtr lParam);
 
@@ -81,13 +82,19 @@ public sealed class WinKeyHook : IDisposable
         if (code >= 0)
         {
             var k = Marshal.PtrToStructure<KbdHook>(lParam);
-            if ((k.Flags & LLKHF_INJECTED) == 0)   // ignore our own synthetic key
+            bool isWin = k.VkCode is 0x5B or 0x5C;
+            bool injected = (k.Flags & LLKHF_INJECTED) != 0;
+            // Not the user's typing: our own synthetic key, or a Win key sent by another program. Any other injected key
+            // still counts. A tool that claims a Win combo (EasySearch on Win+Space) swallows the real second key before we
+            // see it and injects a dummy one so the Start menu stays closed; that dummy is the only sign the Win press
+            // was a shortcut, so it must cancel the tap.
+            bool ignore = k.ExtraInfo == OwnMarker || (injected && isWin);
+            if (!ignore)
             {
                 int msg = wParam.ToInt32();
                 bool down = msg is WM_KEYDOWN or WM_SYSKEYDOWN;
                 bool up = msg is WM_KEYUP or WM_SYSKEYUP;
 
-                bool isWin = k.VkCode is 0x5B or 0x5C;
                 if (_detector.Feed((int)k.VkCode, down, up, isWin && down && AnyOtherKeyHeld()))
                 {
                     // A key press between Win down and Win up makes Windows treat it as a shortcut, not a Start tap.
@@ -113,8 +120,8 @@ public sealed class WinKeyHook : IDisposable
     private static void CancelStartMenu()
     {
         var inputs = new Input[2];
-        inputs[0].Type = 1; inputs[0].U.Keyboard = new KeybdInput { Vk = VK_UNASSIGNED };
-        inputs[1].Type = 1; inputs[1].U.Keyboard = new KeybdInput { Vk = VK_UNASSIGNED, Flags = 0x0002 /* KEYEVENTF_KEYUP */ };
+        inputs[0].Type = 1; inputs[0].U.Keyboard = new KeybdInput { Vk = VK_UNASSIGNED, ExtraInfo = OwnMarker };
+        inputs[1].Type = 1; inputs[1].U.Keyboard = new KeybdInput { Vk = VK_UNASSIGNED, Flags = 0x0002 /* KEYEVENTF_KEYUP */, ExtraInfo = OwnMarker };
         SendInput(2, inputs, Marshal.SizeOf<Input>());
     }
 
