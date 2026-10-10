@@ -15,7 +15,8 @@ public sealed class ScanOptions
     /// <summary>Absolute directory paths skipped together with everything below them.</summary>
     public IReadOnlyCollection<string> ExcludePaths { get; init; } = Array.Empty<string>();
 
-    public int Parallelism { get; init; } = Math.Clamp(Environment.ProcessorCount, 2, 8);
+    /// <summary>Automatic/background scans use one worker to avoid competing with foreground work.</summary>
+    public int Parallelism { get; init; } = 1;
 
     /// <summary>Lower thread and I/O priority so a refresh doesn't compete with foreground work.</summary>
     public bool Background { get; init; }

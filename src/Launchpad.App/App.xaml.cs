@@ -13,7 +13,6 @@ public partial class App : Application
     private SingleInstance? _single;
     private AppSettings _settings = new();
     private HotkeyHost? _hotkey;
-    private IndexService? _index;
     private AppCatalog? _catalog;
     private MainWindow? _window;
     private WinKeyHook? _winKey;
@@ -57,9 +56,7 @@ public partial class App : Application
         bool background = e.Args.Contains("--background") || addPath != null;
         _settings = AppSettings.Load();
         _catalog = new AppCatalog();
-        _index = new IndexService(_settings);
-
-        _window = new MainWindow(_settings, _index)
+        _window = new MainWindow(_settings)
         {
             ChangeHotkey = spec =>
             {
@@ -67,14 +64,8 @@ public partial class App : Application
                 _hotkey.Register(_settings.Hotkey);   // put the old one back
                 return false;
             },
-            RebuildIndexRequested = () => _ = _index.RebuildAsync(),
             RefreshAppsRequested = () => _ = RefreshAppsAsync(rebuildIcons: true),
             WinKeyToggleRequested = on => SetWinKey(on),
-            IndexToggleRequested = on =>
-            {
-                if (on) _ = _index.StartAsync();
-                else Task.Run(_index.Stop);
-            },
             AddItemRequested = AddItemFromPicker,
             AddInstalledApplicationRequested = AddInstalledApplication,
         };
@@ -100,8 +91,6 @@ public partial class App : Application
             _pendingAddPaths.Clear();
             _ = RefreshAppsAsync(rebuildIcons: false);
         }, TaskScheduler.FromCurrentSynchronizationContext());
-
-        _ = _index.StartAsync();
 
         if (!background) Dispatcher.InvokeAsync(() => _window.ShowLaunchpad(), DispatcherPriority.ApplicationIdle);
     }
@@ -194,9 +183,7 @@ public partial class App : Application
         try
         {
             var settings = AppSettings.Load();
-            var index = new IndexService(settings);
-            if (Opt("--scan") is { } scanRoot) index.ScanForTest(scanRoot); else index.LoadSnapshotOnly();
-            var window = new MainWindow(settings, index);
+            var window = new MainWindow(settings);
             window.SetApps(new AppCatalog().LoadCached());
             window.RenderOpenGroup = args.Contains("--open-group");
             int.TryParse(Arg("--page"), out int page);
@@ -248,7 +235,7 @@ public partial class App : Application
             if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("LAUNCHPAD_DATA")))
                 throw new InvalidOperationException("--reorder-test changes the saved order; set LAUNCHPAD_DATA to a scratch folder first.");
             var settings = AppSettings.Load();
-            var window = new MainWindow(settings, new IndexService(settings));
+            var window = new MainWindow(settings);
             window.SetApps(new AppCatalog().LoadCached());
             File.WriteAllText(path + ".txt", await window.SelfTestReorderAsync(path, 1920, 1080));
         }
@@ -309,7 +296,6 @@ public partial class App : Application
             catch (Exception) { }
         };
         menu.Items.Add(_startupItem);
-        menu.Items.Add("Rebuild file index", null, (_, _) => _ = _index!.RebuildAsync());
         menu.Items.Add("Refresh apps", null, (_, _) => _ = RefreshAppsAsync(rebuildIcons: true));
         menu.Items.Add("Open data folder", null, (_, _) => Process.Start(new ProcessStartInfo(AppPaths.DataDir) { UseShellExecute = true }));
         menu.Items.Add(new WinForms.ToolStripSeparator());
@@ -347,7 +333,6 @@ public partial class App : Application
             if (_tray != null) { _tray.Visible = false; _tray.Dispose(); }
             _winKey?.Dispose();
             _hotkey?.Dispose();
-            _index?.Dispose();
             _settings.Save();
             _single?.Dispose();
         }
@@ -356,7 +341,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        if (!_quitting) { _quitting = true; _hotkey?.Dispose(); _index?.Dispose(); _single?.Dispose(); }
+        if (!_quitting) { _quitting = true; _hotkey?.Dispose(); _single?.Dispose(); }
         base.OnExit(e);
     }
 

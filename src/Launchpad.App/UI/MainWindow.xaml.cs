@@ -56,16 +56,14 @@ public partial class MainWindow : Window
 
     /// <summary>Asks the host to rebind the global shortcut; returns false if the combination is unusable.</summary>
     public Func<string, bool>? ChangeHotkey { get; set; }
-    public Action? RebuildIndexRequested { get; set; }
     public Action? RefreshAppsRequested { get; set; }
-    public Action<bool>? IndexToggleRequested { get; set; }
     public Action<string>? AddItemRequested { get; set; }
     public Action<AppItem>? AddInstalledApplicationRequested { get; set; }
 
     /// <summary>Turns the Windows-key takeover on or off; returns false if the hook couldn't be installed.</summary>
     public Func<bool, bool>? WinKeyToggleRequested { get; set; }
 
-    public MainWindow(AppSettings settings, IndexService index)
+    public MainWindow(AppSettings settings)
     {
         _settings = settings;
         InitializeComponent();
@@ -1042,16 +1040,7 @@ public partial class MainWindow : Window
     private void ApplySearchFilter(bool resetScroll = false)
     {
         string[] words = SearchBox.Text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-        bool Matches(string name) => words.All(word => name.Contains(word, StringComparison.OrdinalIgnoreCase));
-        if (words.Length == 0)
-            _items = BuildItems(_visibleApps);
-        else
-        {
-            var matchingApps = _visibleApps.Where(app => Matches(app.Name)).ToList();
-            foreach (var group in _settings.Groups.Where(group => Matches(group.Name)))
-                matchingApps.AddRange(_visibleApps.Where(app => group.AppIds.Contains(app.Id, StringComparer.OrdinalIgnoreCase)));
-            _items = BuildStandaloneItems(matchingApps.DistinctBy(app => app.Id));
-        }
+        _items = words.Length == 0 ? BuildItems(_visibleApps) : BuildSearchItems(words);
         if (_openGroup != null)
             _items = _items.Where(item => item.App != null && _openGroup.AppIds.Contains(item.App.Id, StringComparer.OrdinalIgnoreCase)).ToList();
         _focusedSearchItem = -1;
@@ -1179,7 +1168,6 @@ public partial class MainWindow : Window
     private void OnSettingsClick(object sender, RoutedEventArgs e)
     {
         StartupSwitch.IsChecked = LoginStartup.IsEnabled();
-        IndexSwitch.IsChecked = _settings.IndexFiles;
         WinKeySwitch.IsChecked = _settings.WinKeyOpensLaunchpad;
         UtilitiesSwitch.IsChecked = _settings.ShowAllApps;
         SyncArrangeChips();
@@ -1188,7 +1176,6 @@ public partial class MainWindow : Window
             : $"{utilities} admin tools and helpers are kept out of the grid.";
         HotkeyButton.Content = _settings.Hotkey;
         UnhideButton.Visibility = _settings.HiddenApps.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        IndexSettingsInfo.Text = _settings.IndexFiles ? "File search index is enabled" : "File search index is disabled";
         SettingsOverlay.Visibility = Visibility.Visible;
     }
 
@@ -1226,15 +1213,6 @@ public partial class MainWindow : Window
         _settings.Save();
     }
 
-    private void OnIndexToggle(object sender, RoutedEventArgs e)
-    {
-        bool on = IndexSwitch.IsChecked == true;
-        _settings.IndexFiles = on;
-        _settings.Save();
-        IndexToggleRequested?.Invoke(on);
-    }
-
-    private void OnRebuildClick(object sender, RoutedEventArgs e) { RebuildIndexRequested?.Invoke(); CloseSettings(); }
     private void OnRefreshAppsClick(object sender, RoutedEventArgs e) { RefreshAppsRequested?.Invoke(); CloseSettings(); }
 
     private void OnUnhideClick(object sender, RoutedEventArgs e)

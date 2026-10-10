@@ -11,7 +11,6 @@ public static class AppPaths
         : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Launchpad"));
 
     public static string SettingsFile => Path.Combine(DataDir, "settings.json");
-    public static string IndexFile => Path.Combine(DataDir, "index.bin");
 
     private static string EnsureDir(string p) { Directory.CreateDirectory(p); return p; }
 }
@@ -22,14 +21,6 @@ public sealed class AppSettings
     public string Hotkey { get; set; } = "Ctrl+Alt+L";
 
     public bool LaunchAtLogin { get; set; }
-
-    /// <summary>Folders / drives to index. Empty means every fixed drive.</summary>
-    public List<string> IndexedRoots { get; set; } = new();
-
-    /// <summary>Folders skipped (with everything below them).</summary>
-    public List<string> ExcludedPaths { get; set; } = new();
-
-    public bool IndexFiles { get; set; } = true;
 
     /// <summary>Opt-in: a lone tap of the Windows key opens Launchpad instead of the Start menu (Win+other shortcuts are untouched).</summary>
     public bool WinKeyOpensLaunchpad { get; set; }

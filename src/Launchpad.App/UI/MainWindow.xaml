@@ -277,17 +277,7 @@
                                   Click="OnWinKeyToggle"/>
                     </Grid>
 
-                    <Grid Margin="0,0,0,16">
-                        <StackPanel>
-                            <TextBlock Text="Search files" FontSize="14"/>
-                            <TextBlock x:Name="IndexSettingsInfo" Text="" FontSize="12" Foreground="{StaticResource SubtleTextBrush}"/>
-                        </StackPanel>
-                        <CheckBox x:Name="IndexSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center"
-                                  Click="OnIndexToggle"/>
-                    </Grid>
-
                     <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                        <Button Content="Rebuild file index" Style="{StaticResource PillButton}" Foreground="White" Click="OnRebuildClick" Margin="0,0,8,0"/>
                         <Button Content="Refresh apps" Style="{StaticResource PillButton}" Foreground="White" Click="OnRefreshAppsClick" Margin="0,0,8,0"/>
                         <Button x:Name="UnhideButton" Content="Unhide apps" Style="{StaticResource PillButton}" Foreground="White" Click="OnUnhideClick"/>
                     </StackPanel>

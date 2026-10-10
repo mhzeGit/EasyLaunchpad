@@ -10,7 +10,7 @@ Double-click **`build.bat`**: it stops a running copy, cleans, builds to `dist\`
 
 ```powershell
 ./publish.ps1          # builds .\dist\Launchpad.exe (needs the .NET 8 Desktop Runtime; add -SelfContained to bundle it)
-.\dist\Launchpad.exe   # first run opens the launcher and builds the file index in the background
+.\dist\Launchpad.exe   # first run opens the launcher and initializes the installed-app catalog
 ```
 
 | Action | How |
@@ -29,13 +29,8 @@ Launch it with `--background` (what "Start with Windows" uses) to stay hidden un
 
 ## How it works
 
-* **Index** – one in-memory catalogue (struct-of-arrays: a single UTF-16 name buffer, parent ids, size, time, flags,
-  extension ids) plus a compact (parent, name) hash table. About 90 bytes per file; 2.2 million files on this PC scan in
-  ~15 s (cold ~45 s), snapshot to 164 MB and load back in ~0.5 s.
-* **Stays current** – on start the saved snapshot is shown immediately and *reconciled* with the disk in the background
-  (only differences are applied). While running, `ReadDirectoryChangesW` notifications are applied in small debounced
-  batches: creates, deletes, renames and moves (a folder rename is O(1) because children point at their parent's id),
-  size/time changes. If Windows drops notifications, a quiet re-reconcile runs.
+* **App catalogue** – checks the installed application list once at startup. Cached icons and app details paint the
+  launcher immediately; apps the user adds are saved and applied directly to the catalogue.
 * **Search** – filters the apps and groups already shown in Launchpad by name. Space-separated words must all match;
   results keep the current grid ordering and keyboard arrows move focus through the grid.
 * **Blur** – the monitor is captured, shrunk, blurred and graded on the CPU, then crossfaded in. Because the overlay is
@@ -48,8 +43,7 @@ Launch it with `--background` (what "Start with Windows" uses) to stay hidden un
   rim light, gloss). Icons with transparent areas keep them: the artwork is scaled up and drawn on its own with a soft shadow, no
   tile behind it. A flat-coloured plate with just a tiny logo, or a pale white/grey backing behind a drawing, is removed. Where an opaque plate has transparent corners (a rounded body, a dome), the tile there takes the plate's own colour instead of white. Results are cached on disk.
 
-Data lives in `%LOCALAPPDATA%\Launchpad` (`settings.json`, `index.bin`, `icons\`, `apps.json`).
-Edit `settings.json` for the things without UI yet: `IndexedRoots` (default: all fixed drives) and `ExcludedPaths`.
+Data lives in `%LOCALAPPDATA%\Launchpad` (`settings.json`, `icons\`, `apps.json`). Installed apps are checked once at startup; custom items are persisted in settings and added directly to the catalog. Launchpad does not crawl folders or drives.
 
 ## Developing
 

@@ -84,7 +84,9 @@ public sealed class IndexWatcher : IDisposable
             _gate.Wait(ct);
             while (!ct.IsCancellationRequested)
             {
-                if (!_events.TryTake(out var first, 500, ct)) continue;
+                // Block until the OS reports a change. A periodic timeout only wakes this
+                // thread while the app is idle and does not improve notification accuracy.
+                if (!_events.TryTake(out var first, Timeout.Infinite, ct)) continue;
                 batch.Clear();
                 batch.Add(first);
                 var hard = DateTime.UtcNow.AddSeconds(2);

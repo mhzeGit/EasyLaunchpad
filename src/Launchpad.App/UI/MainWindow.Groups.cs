@@ -57,17 +57,39 @@ public partial class MainWindow
         return AppOrdering.Apply(items, AppOrdering.Parse(_settings.AppSort), _settings.AppOrder, i => i.Id, i => i.Name, i => i.Launches);
     }
 
-    /// <summary>During search, show matching group members as regular app tiles instead of collapsing them into folders.</summary>
-    private List<GridItem> BuildStandaloneItems(IEnumerable<AppItem> apps)
+    /// <summary>
+    /// During search, matching apps (and the members of matching groups) as regular app tiles instead of folders, best match first:
+    /// a name that starts with what was typed beats one where it only begins a later word. Ties go to the more used app.
+    /// </summary>
+    private List<GridItem> BuildSearchItems(string[] words)
     {
-        var items = apps.Select(app => new GridItem
+        string[] terms = words.Select(w => w.ToLowerInvariant()).ToArray();
+        string query = string.Join(' ', terms);
+
+        var scores = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var app in _visibleApps)
         {
-            Id = app.Id,
-            Name = app.Name,
-            App = app,
-            Launches = _settings.Launches.GetValueOrDefault(app.Id),
-        }).ToList();
-        return AppOrdering.Apply(items, AppOrdering.Parse(_settings.AppSort), _settings.AppOrder, i => i.Id, i => i.Name, i => i.Launches);
+            int s = AppNameMatcher.Score(app.NameLower, app.Initials, query, terms);
+            if (s > 0) scores[app.Id] = s;
+        }
+        foreach (var group in _settings.Groups)
+        {
+            string name = group.Name.ToLowerInvariant();
+            int s = AppNameMatcher.Score(name, AppNameMatcher.InitialsOf(name), query, terms);
+            if (s <= 0) continue;
+            s = Math.Max(1, s - 100);   // a member found only through its folder ranks below an app whose own name matches as well
+            foreach (var app in _visibleApps)
+                if (group.AppIds.Contains(app.Id, StringComparer.OrdinalIgnoreCase) && s > scores.GetValueOrDefault(app.Id))
+                    scores[app.Id] = s;
+        }
+
+        return _visibleApps
+            .Where(app => scores.ContainsKey(app.Id))
+            .Select(app => new GridItem { Id = app.Id, Name = app.Name, App = app, Launches = _settings.Launches.GetValueOrDefault(app.Id) })
+            .OrderByDescending(item => scores[item.Id])
+            .ThenByDescending(item => item.Launches)
+            .ThenBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
     }
 
     private Border CreateGridTile(GridItem item, double iconSize, double cellW, double cellH)

@@ -6,3 +6,5 @@ dist/
 dist-test/
 tmp-launchpad-run/
 tmp-launchpad-render/
+
+release/

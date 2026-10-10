@@ -8,14 +8,7 @@ public sealed class AppItem
     {
         Id = id; Name = name; Target = target; IsUtility = isUtility; IsCustom = isCustom; IsShellApplication = isShellApplication;
         NameLower = name.ToLowerInvariant();
-        var sb = new System.Text.StringBuilder();
-        bool boundary = true;
-        foreach (char c in NameLower)
-        {
-            if (char.IsLetterOrDigit(c)) { if (boundary) sb.Append(c); boundary = false; }
-            else boundary = true;
-        }
-        Initials = sb.ToString();
+        Initials = Launchpad.Core.Apps.AppNameMatcher.InitialsOf(NameLower);
     }
 
     public string Id { get; }

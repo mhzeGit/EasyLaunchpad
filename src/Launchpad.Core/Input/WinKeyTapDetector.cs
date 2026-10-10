@@ -9,13 +9,14 @@ public sealed class WinKeyTapDetector
     public void Reset() => _winDown = _otherKeyPressed = false;
 
     /// <summary>Feeds one physical key event; returns true when it completes a lone Win tap.</summary>
-    public bool Feed(int vk, bool down, bool up)
+    /// <param name="otherKeyHeld">True when some non-Win key was already held as Win went down (Ctrl+Win, Shift+Win, ...).</param>
+    public bool Feed(int vk, bool down, bool up, bool otherKeyHeld = false)
     {
         if (vk is VK_LWIN or VK_RWIN)
         {
             if (down)
             {
-                if (!_winDown) { _winDown = true; _otherKeyPressed = false; }   // ignore auto-repeat
+                if (!_winDown) { _winDown = true; _otherKeyPressed = otherKeyHeld; }   // ignore auto-repeat
             }
             else if (up && _winDown)
             {

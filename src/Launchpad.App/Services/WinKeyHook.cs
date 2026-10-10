@@ -45,6 +45,7 @@ public sealed class WinKeyHook : IDisposable
     [DllImport("user32.dll")] private static extern bool UnhookWindowsHookEx(IntPtr hook);
     [DllImport("user32.dll")] private static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr wParam, IntPtr lParam);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr GetModuleHandle(string? name);
+    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int vKey);
     [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint count, Input[] inputs, int size);
 
     private readonly HookProc _proc;      // kept in a field so the delegate isn't garbage collected while hooked
@@ -86,7 +87,8 @@ public sealed class WinKeyHook : IDisposable
                 bool down = msg is WM_KEYDOWN or WM_SYSKEYDOWN;
                 bool up = msg is WM_KEYUP or WM_SYSKEYUP;
 
-                if (_detector.Feed((int)k.VkCode, down, up))
+                bool isWin = k.VkCode is 0x5B or 0x5C;
+                if (_detector.Feed((int)k.VkCode, down, up, isWin && down && AnyOtherKeyHeld()))
                 {
                     // A key press between Win down and Win up makes Windows treat it as a shortcut, not a Start tap.
                     CancelStartMenu();
@@ -95,6 +97,17 @@ public sealed class WinKeyHook : IDisposable
             }
         }
         return CallNextHookEx(_hook, code, wParam, lParam);
+    }
+
+    /// <summary>True if any keyboard key other than Win is physically down (e.g. Ctrl or Shift held before Win).</summary>
+    private static bool AnyOtherKeyHeld()
+    {
+        for (int vk = 0x08; vk <= 0xFE; vk++)
+        {
+            if (vk is 0x5B or 0x5C) continue;
+            if ((GetAsyncKeyState(vk) & 0x8000) != 0) return true;
+        }
+        return false;
     }
 
     private static void CancelStartMenu()
