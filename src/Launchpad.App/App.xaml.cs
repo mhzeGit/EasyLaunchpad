@@ -37,7 +37,7 @@ public partial class App : Application
             try
             {
                 if (addPath != null) _single.SignalExistingAdd(addPath);
-                else _single.SignalExisting(toggle: e.Args.Contains("--toggle"));
+                else if (!e.Args.Contains("--background")) _single.SignalExisting(toggle: e.Args.Contains("--toggle"));
             }
             catch (Exception ex) { LogCrash(ex); }
             Shutdown();
