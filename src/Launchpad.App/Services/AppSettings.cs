@@ -20,7 +20,8 @@ public sealed class AppSettings
     /// <summary>Global shortcut, e.g. "Ctrl+Alt+L", "Win+Shift+L", "F4".</summary>
     public string Hotkey { get; set; } = "Ctrl+Alt+L";
 
-    public bool LaunchAtLogin { get; set; }
+    public bool LaunchAtLogin { get; set; } = true;
+    public bool StartupConfigured { get; set; }
 
     /// <summary>On by default (can be switched off in Settings): a lone tap of the Windows key opens Launchpad instead of the Start menu (Win+other shortcuts are untouched).</summary>
     public bool WinKeyOpensLaunchpad { get; set; } = true;
@@ -56,10 +57,20 @@ public sealed class AppSettings
         try
         {
             if (File.Exists(AppPaths.SettingsFile))
-                return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(AppPaths.SettingsFile)) ?? new AppSettings();
+            {
+                var settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(AppPaths.SettingsFile)) ?? new AppSettings();
+                // Enable existing installs once; preserve later choices to turn startup off.
+                if (!settings.StartupConfigured)
+                {
+                    settings.LaunchAtLogin = true;
+                    settings.StartupConfigured = true;
+                    settings.Save();
+                }
+                return settings;
+            }
         }
         catch (Exception) { /* corrupt file: start over with defaults */ }
-        return new AppSettings();
+        return new AppSettings { StartupConfigured = true };
     }
 
     public void Save()

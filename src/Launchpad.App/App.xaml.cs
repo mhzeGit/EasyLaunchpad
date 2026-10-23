@@ -30,6 +30,9 @@ public partial class App : Application
         if (e.Args.Contains("--render-test")) { RenderTest(e.Args); return; }
         if (e.Args.Contains("--reorder-test")) { ReorderTest(e.Args); return; }
         if (e.Args.Contains("--dump-icon")) { DumpIcon(e.Args); return; }
+        _settings = AppSettings.Load();
+        try { LoginStartup.SetEnabled(_settings.LaunchAtLogin); }
+        catch (Exception ex) { LogCrash(ex); }
         string? addPath = ArgumentValue(e.Args, "--add-to-launchpad");
         _single = new SingleInstance();
         if (!_single.IsFirst)
@@ -54,7 +57,6 @@ public partial class App : Application
         ExplorerIntegration.Register();
 
         bool background = e.Args.Contains("--background") || addPath != null;
-        _settings = AppSettings.Load();
         _catalog = new AppCatalog();
         _window = new MainWindow(_settings)
         {
