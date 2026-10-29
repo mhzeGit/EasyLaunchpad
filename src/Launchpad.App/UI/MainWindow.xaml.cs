@@ -1087,6 +1087,15 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (e.Key == Key.Space && !SearchBox.IsKeyboardFocused)
+        {
+            SearchBox.Focus();
+            SearchBox.Text += " ";
+            SearchBox.CaretIndex = SearchBox.Text.Length;
+            e.Handled = true;
+            return;
+        }
+
         switch (e.Key)
         {
             case Key.Escape:
