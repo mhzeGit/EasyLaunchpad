@@ -67,6 +67,7 @@ public partial class MainWindow : Window
     {
         _settings = settings;
         InitializeComponent();
+        if (EasyTools.Updating.AppUpdater.LastFailure() is { } updateFailure) UpdateStatus.Text = updateFailure;
         LoadWindowsProfile();
 
         SourceInitialized += OnSourceInitialized;

@@ -26,6 +26,7 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        if (EasyTools.Updating.AppUpdater.HandleStartup(e.Args)) { Shutdown(); return; }
         DispatcherUnhandledException += (_, ex) => { LogCrash(ex.Exception); ex.Handled = true; };
         if (e.Args.Contains("--render-test")) { RenderTest(e.Args); return; }
         if (e.Args.Contains("--reorder-test")) { ReorderTest(e.Args); return; }
@@ -81,6 +82,7 @@ public partial class App : Application
         _single.ShowRequested += () => Dispatcher.BeginInvoke(() => _window.ShowLaunchpad());
         _single.ToggleRequested += () => Dispatcher.BeginInvoke(() => _window.Toggle());
         BuildTray();
+        EasyTools.Updating.AppUpdater.AcknowledgeStartup(e.Args);
 
         // Paint instantly from the cache, then let the shell tell us what changed.
         Task.Run(() => _catalog.LoadCached(_settings.CustomApps.ToArray())).ContinueWith(t =>
@@ -299,6 +301,7 @@ public partial class App : Application
         };
         menu.Items.Add(_startupItem);
         menu.Items.Add("Refresh apps", null, (_, _) => _ = RefreshAppsAsync(rebuildIcons: true));
+        menu.Items.Add("Check for updates…", null, (_, _) => { _window?.ShowLaunchpad(); _window?.OpenUpdateSettings(); });
         menu.Items.Add("Open data folder", null, (_, _) => Process.Start(new ProcessStartInfo(AppPaths.DataDir) { UseShellExecute = true }));
         menu.Items.Add(new WinForms.ToolStripSeparator());
         menu.Items.Add("Quit", null, (_, _) => Quit());
@@ -326,7 +329,7 @@ public partial class App : Application
 
     // ================================================================== lifecycle
 
-    private void Quit()
+    internal void Quit()
     {
         if (_quitting) return;
         _quitting = true;

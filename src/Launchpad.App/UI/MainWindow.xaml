@@ -282,8 +282,14 @@
                         <Button x:Name="UnhideButton" Content="Unhide apps" Style="{StaticResource PillButton}" Foreground="White" Click="OnUnhideClick"/>
                     </StackPanel>
 
-                    <TextBlock Text="Esc closes · type to search · try  ext:pdf  size:&gt;10mb  date:week  type:image  -draft"
-                               FontSize="11.5" Foreground="#80FFFFFF" TextWrapping="Wrap" Margin="0,22,0,0"/>
+                    <StackPanel Margin="0,18,0,0">
+                        <TextBlock Text="Updates" FontSize="14"/>
+                        <TextBlock x:Name="UpdateStatus" Text="Check GitHub for the latest build. Your apps and settings are preserved."
+                                   FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap" Margin="0,4,0,8"
+                                   AutomationProperties.LiveSetting="Polite"/>
+                        <Button x:Name="UpdateButton" Content="Check for updates" Style="{StaticResource PillButton}"
+                                Foreground="White" HorizontalAlignment="Left" Click="OnUpdateClick"/>
+                    </StackPanel>
                 </StackPanel>
             </Border>
         </Grid>

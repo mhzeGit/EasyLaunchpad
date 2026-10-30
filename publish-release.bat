@@ -93,6 +93,12 @@ if not exist "%ZIP%" (
     echo [error] Expected "%ZIP%" was not produced.
     exit /b 1
 )
+set "BUILD_ID="
+for /f "delims=" %%B in ('powershell -NoProfile -Command "(ConvertFrom-Json -InputObject ([IO.File]::ReadAllText('%~dp0release\EasyLaunchpad-%VERSION%-win-x64\update-manifest.json'))).buildId"') do set "BUILD_ID=%%B"
+if not defined BUILD_ID (
+    echo [error] The release build identity is missing.
+    exit /b 1
+)
 
 set "DIRTY="
 for /f "delims=" %%S in ('git status --porcelain 2^>nul') do set "DIRTY=1"
@@ -103,9 +109,9 @@ echo.
 echo === 3/3  Uploading to GitHub release v%VERSION% ===
 call "%GH%" release view v%VERSION% --repo %REPO% >nul 2>&1
 if errorlevel 1 (
-    call "%GH%" release create v%VERSION% "%ZIP%" --repo %REPO% --target main --title "EasyLaunchpad %VERSION%" --notes "Portable Windows x64 build of EasyLaunchpad %VERSION%. Unzip it and run EasyLaunchpad.exe."
+    call "%GH%" release create v%VERSION% "%ZIP%#build:%BUILD_ID%" --repo %REPO% --target main --title "EasyLaunchpad %VERSION%" --notes "Portable Windows x64 build of EasyLaunchpad %VERSION%. Unzip it and run EasyLaunchpad.exe."
 ) else (
-    call "%GH%" release upload v%VERSION% "%ZIP%" --repo %REPO% --clobber
+    call "%GH%" release upload v%VERSION% "%ZIP%#build:%BUILD_ID%" --repo %REPO% --clobber
 )
 if errorlevel 1 (
     echo [error] Upload to GitHub failed.

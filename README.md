@@ -45,6 +45,25 @@ Launch it with `--background` (what "Start with Windows" uses) to stay hidden un
 
 Data lives in `%LOCALAPPDATA%\Launchpad` (`settings.json`, `icons\`, `apps.json`). Installed apps are checked once at startup; custom items are persisted in settings and added directly to the catalog. Launchpad does not crawl folders or drives.
 
+## Updating
+
+Open **Settings → Check for updates**, or choose **Check for updates…** in the tray menu. When a
+build is available, **Update & restart** verifies the GitHub release download, closes Launchpad,
+replaces its files in the current folder, and restarts quietly. Your apps, groups, settings and
+startup preference are preserved; startup and Explorer integration are refreshed automatically.
+The receiving machine needs no Git or GitHub login. The release must be public and the app folder
+must be writable.
+
+The updater detects new version tags and replacement ZIPs under the same version. Build-generated
+`update-manifest.json` inventories owned files so obsolete binaries can be removed without touching
+unlisted personal files. Temporary downloads and backups are removed after success or successful
+rollback. A failed startup restores the previous build; interrupted transactions are recovered on
+the next launch, retaining backups if recovery fails. Builds predating this feature need one manual
+installation of the current release ZIP before future in-app updates are available.
+
+Run `powershell -NoProfile -ExecutionPolicy Bypass -File tools/TestUpdate.ps1` for isolated installer
+tests covering success, rollback, locked files and interrupted transactions.
+
 ## Developing
 
 ```powershell

@@ -38,6 +38,9 @@ if not exist "%RELEASE_DIR%\Launchpad.exe" (
 
 rem Provide the branded executable name at the top level of the release bundle.
 copy /y "%RELEASE_DIR%\Launchpad.exe" "%RELEASE_DIR%\EasyLaunchpad.exe" >nul
+rem Refresh the file inventory after adding the branded executable alias.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\WriteUpdateManifest.ps1" -Directory "%RELEASE_DIR%" -Product EasyLaunchpad -Version "%VERSION%"
+if errorlevel 1 exit /b 1
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path '%RELEASE_DIR%\*' -DestinationPath '%ZIP_FILE%' -CompressionLevel Optimal"
 if errorlevel 1 (
